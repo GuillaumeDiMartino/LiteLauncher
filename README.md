@@ -30,7 +30,8 @@ Ma Chromecast est à l'IP [IP], mode développeur et débogage USB activés, sur
 5. Compile l'APK en release et installe-le sur la Chromecast.
 6. Donne l'accès aux statistiques d'usage (rangée Récents) et passe les animations système à 0.5x, avec les commandes ADB de la section Install.
 7. Avant de désactiver le launcher Google (com.google.android.apps.tv.launcherx), demande-moi confirmation et rappelle-moi la commande pour revenir en arrière.
-8. Pousse les modifications sur le dépôt GitHub.
+8. Mesure la mémoire utilisée avant et après (dumpsys meminfo), puis guide-moi dans la section "Chromecast optimizations" du README : propose la liste des paquets à désactiver à partir de ceux réellement installés, en m'expliquant chacun, et demande-moi confirmation avant chaque désactivation.
+9. Pousse les modifications sur le dépôt GitHub.
 ```
 
 ## Remote control
@@ -90,6 +91,59 @@ adb shell settings put global transition_animation_scale 0.5
 ```bash
 adb shell settings put global animator_duration_scale 0.5
 ```
+
+## Chromecast optimizations
+
+Optional, done once over ADB. Every step is reversible.
+
+### Measure first
+
+Total memory and the biggest consumers (run before and after to compare):
+
+```bash
+adb shell dumpsys meminfo
+```
+
+### Disable unused Google packages
+
+List enabled packages, then decide app by app from what is actually installed:
+
+```bash
+adb shell pm list packages -e
+```
+
+Disable one (stops it entirely, survives reboots):
+
+```bash
+adb shell pm disable-user --user 0 <package>
+```
+
+Re-enable it:
+
+```bash
+adb shell pm enable <package>
+```
+
+Usual candidates, if present and unused: content recommendations (`com.google.android.tvrecommendations`),
+Play Movies (`com.google.android.videos`), feedback (`com.google.android.feedback`), YouTube Music
+(`com.google.android.youtube.tvmusic`), Play Games (`com.google.android.play.games`).
+Check each name exists on the device before disabling it.
+
+Never disable: Google Play services (`com.google.android.gms`, `com.google.android.gsf`), Play Store
+(`com.android.vending`), Assistant and voice search (`com.google.android.katniss`), Cast receiver
+(`com.google.android.apps.mediashell`), setup (`com.google.android.tungsten.setupwraith`), anything
+under `com.android.providers.*`, and anything you are unsure about. When in doubt, leave it.
+
+### Settings on the TV
+
+- Ambient mode downloads photos and info continuously. Switch the screensaver to a simple one in
+  Settings > System > Ambient mode (or Screensaver).
+- Play Store > Settings > Auto-update apps: off, then update by hand from time to time. Avoids
+  background installs while watching.
+- Keep at least 1 to 2 GB free (Settings > System > Storage). Uninstall unused apps, clear the
+  cache of large ones.
+- Optional: Developer options > Background process limit. Saves memory, but apps reload more often
+  when you switch back. Try it, keep it only if it feels better.
 
 ## Undo
 

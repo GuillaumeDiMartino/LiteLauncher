@@ -15,8 +15,11 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -237,14 +240,37 @@ public class MainActivity extends Activity {
         for (ResolveInfo ri : pm.queryIntentActivities(i, 0)) {
             ActivityInfo ai = ri.activityInfo;
             if (ai.packageName.equals(getPackageName()) || out.containsKey(ai.packageName)) continue;
-            Drawable banner = leanback ? ai.loadBanner(pm) : null;
+            // Largest slots a banner or icon is shown in: favorites tile, 48dp icon.
+            Drawable banner = leanback ? fit(ai.loadBanner(pm), FAV_SIZE[0], FAV_SIZE[1], true) : null;
             out.put(ai.packageName, new App(
                     new ComponentName(ai.packageName, ai.name),
                     leanback,
                     ri.loadLabel(pm).toString(),
                     banner,
-                    banner == null ? ri.loadIcon(pm) : null));
+                    banner == null ? fit(ri.loadIcon(pm), 48, 48, false) : null));
         }
+    }
+
+    /**
+     * Renders app art once into a bitmap no bigger than its largest tile, so we never
+     * keep full-resolution banners or icons in memory. crop = centerCrop, else fitCenter.
+     */
+    private Drawable fit(Drawable d, int wDp, int hDp, boolean crop) {
+        if (d == null) return null;
+        int w = dp(wDp), h = dp(hDp);
+        int iw = d.getIntrinsicWidth(), ih = d.getIntrinsicHeight();
+        if (iw > 0 && ih > 0 && iw <= w && ih <= h) return d;
+        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        if (iw > 0 && ih > 0) {
+            float s = crop ? Math.max((float) w / iw, (float) h / ih) : Math.min((float) w / iw, (float) h / ih);
+            int sw = Math.round(iw * s), sh = Math.round(ih * s);
+            int left = (w - sw) / 2, top = (h - sh) / 2;
+            d.setBounds(left, top, left + sw, top + sh);
+        } else {
+            d.setBounds(0, 0, w, h);
+        }
+        d.draw(new Canvas(b));
+        return new BitmapDrawable(getResources(), b);
     }
 
     /**
