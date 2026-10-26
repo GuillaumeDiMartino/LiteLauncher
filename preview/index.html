@@ -7,8 +7,8 @@
 <style>
   /* Mirrors app/src/main/res: 1 CSS px = 1 dp. Chromecast GTV = 960x540 dp. */
   :root {
-    --tile-w: 116px;
-    --tile-h: 160px;
+    --tile-w: 150px;
+    --tile-h: 84px;
     --gap: 18px;
     --pad: 56px;
     --clay: linear-gradient(180deg, #4B48B8, #2B2980);   /* res/drawable/tile_bg.xml */
@@ -46,15 +46,12 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 0 0 1px rgba(255,255,255,.07), 0 6px 14px rgba(8,6,40,.45);
     transition: transform .16s cubic-bezier(.2,.8,.3,1), box-shadow .16s;
   }
-  .card .ic { margin-bottom: 26px; display: flex; }
-  .card svg { width: 44px; height: 44px; fill: var(--lavender); }
-  .card .glyph { width: 60px; height: 60px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 24px; letter-spacing: -.02em; }
-  .card .name {
-    position: absolute; left: 10px; right: 10px; bottom: 14px; text-align: center;
-    color: #fff; opacity: .8; font-size: 13px; font-weight: 500;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .16s;
+  .card .banner {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 20px; color: #fff; letter-spacing: -.01em;
   }
-  .tile.focus .card .name { opacity: 1; }
+  .card svg { width: 40px; height: 40px; fill: var(--lavender); }
+  .card .glyph { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 22px; color: #fff; }
   /* Ring drawn above the banner, like android:foreground="@drawable/tile_fg". */
   .card::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); pointer-events: none; }
   .tile.focus .card {
@@ -63,6 +60,11 @@
     z-index: 2;
   }
   .tile.focus .card::after { box-shadow: inset 0 0 0 3px var(--focus); }
+  .label {
+    margin-top: 10px; color: #D8D6FF; opacity: .6; font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .16s, color .16s;
+  }
+  .tile.focus .label { opacity: 1; color: #fff; }
 
   /* res/values/themes.xml Theme.Lite.Dialog */
   #dialog {
@@ -99,17 +101,17 @@
 <div id="help"><kbd>←↑↓→</kbd> naviguer · <kbd>Entrée</kbd> ouvrir · maintenir <kbd>Entrée</kbd> menu · <kbd>Échap</kbd> retour · <kbd>H</kbd> home</div>
 
 <script>
-// Sample apps: stand-ins for the real launcher icons read from the device.
+// Sample apps. banner = leanback banner (gradient + wordmark); otherwise icon on tinted card.
 const APPS = [
-  { id: 'netflix', label: 'Netflix', icon: '#000', glyph: 'N', color: '#E50914' },
-  { id: 'youtube', label: 'YouTube', icon: '#FF0000', glyph: '▶' },
-  { id: 'prime', label: 'Prime Video', icon: '#00A8E1', glyph: 'p' },
-  { id: 'disney', label: 'Disney+', icon: '#0E1A5C', glyph: 'D+' },
-  { id: 'canal', label: 'myCANAL', icon: '#000', glyph: 'C+' },
-  { id: 'spotify', label: 'Spotify', icon: '#1DB954', glyph: 'S', color: '#000' },
-  { id: 'plex', label: 'Plex', icon: '#1F1F1F', glyph: '›', color: '#E5A00D' },
+  { id: 'netflix', label: 'Netflix', banner: ['#000', '#000'], mark: 'NETFLIX', markColor: '#E50914' },
+  { id: 'youtube', label: 'YouTube', banner: ['#0f0f0f', '#0f0f0f'], mark: '▶ YouTube', markColor: '#fff' },
+  { id: 'prime', label: 'Prime Video', banner: ['#00A8E1', '#0F79AF'], mark: 'prime video' },
+  { id: 'disney', label: 'Disney+', banner: ['#0E1A3C', '#1A3A7A'], mark: 'Disney+' },
+  { id: 'canal', label: 'myCANAL', banner: ['#000', '#111'], mark: 'CANAL+' },
+  { id: 'spotify', label: 'Spotify', icon: '#1DB954', glyph: 'S' },
+  { id: 'plex', label: 'Plex', banner: ['#1f1f1f', '#282A2D'], mark: 'plex', markColor: '#E5A00D' },
   { id: 'twitch', label: 'Twitch', icon: '#9146FF', glyph: 'T' },
-  { id: 'arte', label: 'ARTE', icon: '#FA481C', glyph: 'a' },
+  { id: 'arte', label: 'ARTE', banner: ['#FA481C', '#d93a12'], mark: 'ARTE' },
   { id: 'vlc', label: 'VLC', icon: '#FF8800', glyph: '▲' },
   { id: 'kodi', label: 'Kodi', icon: '#17B2E7', glyph: 'K' },
 ];
@@ -123,7 +125,7 @@ let tiles = [], cols = 5, focus = 0, dialog = null;
 
 function render(keepId) {
   const grid = document.getElementById('grid');
-  const pad = 56, gap = 18, tileW = 116;
+  const pad = 56, gap = 18, tileW = 150;
   cols = Math.max(3, Math.floor((960 - 2 * pad + gap) / (tileW + gap)));
   const byId = Object.fromEntries(APPS.map(a => [a.id, a]));
   tiles = order.filter(id => !hidden.has(id)).map(id => ({ ...byId[id], kind: 'app' }));
@@ -137,9 +139,15 @@ function render(keepId) {
     if (i % cols === 0) { row = document.createElement('div'); row.className = 'row'; grid.appendChild(row); }
     const el = document.createElement('div');
     el.className = 'tile';
-    const inner = t.svg ? t.svg
-      : `<div class="glyph" style="background:${t.icon};color:${t.color || '#fff'}">${t.glyph}</div>`;
-    el.innerHTML = `<div class="card"><div class="ic">${inner}</div><div class="name">${t.label}</div></div>`;
+    let inner;
+    if (t.banner) {
+      inner = `<div class="banner" style="background:linear-gradient(135deg,${t.banner[0]},${t.banner[1]});color:${t.markColor || '#fff'}">${t.mark}</div>`;
+    } else if (t.svg) {
+      inner = t.svg;
+    } else {
+      inner = `<div class="glyph" style="background:${t.icon}">${t.glyph}</div>`;
+    }
+    el.innerHTML = `<div class="card">${inner}</div><div class="label">${t.label}</div>`;
     el.onclick = () => { setFocus(i); activate(); };
     row.appendChild(el);
     t.el = el;
@@ -154,8 +162,8 @@ function setFocus(i) {
   tiles[focus].el.classList.add('focus');
   // ScrollView-like: keep focused row visible.
   const rowIdx = Math.floor(focus / cols);
-  const rowH = 160 + 27;
-  const top = 40 + 56 + 34 + 16 + 12 + rowIdx * rowH;
+  const rowH = 84 + 10 + 16 + 27;
+  const top = 40 + 56 + 36 + 16 + 12 + rowIdx * rowH;
   const shift = Math.max(0, top + rowH + 48 - 540);
   document.getElementById('content').style.transform = `translateY(${-shift}px)`;
 }

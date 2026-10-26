@@ -59,12 +59,14 @@ public class MainActivity extends Activity {
         final ComponentName cn;
         final boolean leanback;
         final String label;
+        final Drawable banner;
         final Drawable icon;
 
-        App(ComponentName cn, boolean leanback, String label, Drawable icon) {
+        App(ComponentName cn, boolean leanback, String label, Drawable banner, Drawable icon) {
             this.cn = cn;
             this.leanback = leanback;
             this.label = label;
+            this.banner = banner;
             this.icon = icon;
         }
 
@@ -191,11 +193,13 @@ public class MainActivity extends Activity {
         for (ResolveInfo ri : pm.queryIntentActivities(i, 0)) {
             ActivityInfo ai = ri.activityInfo;
             if (ai.packageName.equals(getPackageName()) || out.containsKey(ai.packageName)) continue;
+            Drawable banner = leanback ? ai.loadBanner(pm) : null;
             out.put(ai.packageName, new App(
                     new ComponentName(ai.packageName, ai.name),
                     leanback,
                     ri.loadLabel(pm).toString(),
-                    ri.loadIcon(pm)));
+                    banner,
+                    banner == null ? ri.loadIcon(pm) : null));
         }
     }
 
@@ -259,7 +263,6 @@ public class MainActivity extends Activity {
     private void render() {
         grid.removeAllViews();
         int tileW = getResources().getDimensionPixelSize(R.dimen.tile_w);
-        int tileH = getResources().getDimensionPixelSize(R.dimen.tile_h);
         int gap = getResources().getDimensionPixelSize(R.dimen.gap);
         int pad = getResources().getDimensionPixelSize(R.dimen.pad);
         int width = getResources().getDisplayMetrics().widthPixels - 2 * pad;
@@ -267,18 +270,18 @@ public class MainActivity extends Activity {
 
         List<View> tiles = new ArrayList<>();
         for (App a : visibleApps()) {
-            tiles.add(makeTile(a.pkg(), a.label, a.icon, 0,
+            tiles.add(makeTile(a.pkg(), a.label, a.banner, a.icon, 0,
                     () -> launch(a), () -> showAppMenu(a)));
         }
         int lavender = getColor(R.color.lavender);
         if (!hasApp(PLAY_STORE) && isInstalled(PLAY_STORE)) {
-            tiles.add(makeTile(KEY_STORE, "Play Store", getDrawable(R.drawable.ic_store), lavender,
+            tiles.add(makeTile(KEY_STORE, "Play Store", null, getDrawable(R.drawable.ic_store), lavender,
                     this::openPlayStore, null));
         }
-        tiles.add(makeTile(KEY_SETTINGS,"Paramètres", getDrawable(R.drawable.ic_settings), lavender,
+        tiles.add(makeTile(KEY_SETTINGS,"Paramètres", null, getDrawable(R.drawable.ic_settings), lavender,
                 () -> startSafely(new Intent(Settings.ACTION_SETTINGS)), null));
         if (!hidden().isEmpty()) {
-            tiles.add(makeTile(KEY_HIDDEN_TILE, "Apps masquées", getDrawable(R.drawable.ic_eye), lavender,
+            tiles.add(makeTile(KEY_HIDDEN_TILE, "Apps masquées", null, getDrawable(R.drawable.ic_eye), lavender,
                     this::showHiddenMenu, null));
         }
 
@@ -293,7 +296,8 @@ public class MainActivity extends Activity {
                 rp.bottomMargin = gap + gap / 2;
                 grid.addView(row, rp);
             }
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, tileH);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    tileW, LinearLayout.LayoutParams.WRAP_CONTENT);
             if (i % cols != cols - 1) lp.setMarginEnd(gap);
             row.addView(tiles.get(i), lp);
         }
@@ -304,10 +308,11 @@ public class MainActivity extends Activity {
     }
 
     /** iconTint = 0 keeps the icon's own colors. */
-    private View makeTile(String key, String label, Drawable icon, int iconTint,
+    private View makeTile(String key, String label, Drawable banner, Drawable icon, int iconTint,
                           Runnable onClick, Runnable onLongClick) {
         View v = getLayoutInflater().inflate(R.layout.tile, grid, false);
-        FrameLayout card = (FrameLayout) v;
+        FrameLayout card = v.findViewById(R.id.card);
+        ImageView bannerView = v.findViewById(R.id.banner);
         ImageView iconView = v.findViewById(R.id.icon);
         TextView labelView = v.findViewById(R.id.label);
 
@@ -319,12 +324,13 @@ public class MainActivity extends Activity {
         card.setContentDescription(label);
         labelView.setText(label);
 
-        iconView.setImageDrawable(icon);
-        if (iconTint != 0) {
-            // System glyphs render at 44dp inside the 60dp icon slot.
-            int p = Math.round(8 * getResources().getDisplayMetrics().density);
-            iconView.setPadding(p, p, p, p);
-            iconView.setImageTintList(ColorStateList.valueOf(iconTint));
+        if (banner != null) {
+            bannerView.setImageDrawable(banner);
+            iconView.setVisibility(View.GONE);
+        } else {
+            bannerView.setVisibility(View.GONE);
+            iconView.setImageDrawable(icon);
+            if (iconTint != 0) iconView.setImageTintList(ColorStateList.valueOf(iconTint));
         }
 
         float lift = 14 * getResources().getDisplayMetrics().density;
@@ -333,7 +339,7 @@ public class MainActivity extends Activity {
             float s = has ? 1.08f : 1f;
             view.animate().scaleX(s).scaleY(s).translationZ(has ? lift : 0)
                     .setDuration(160).setInterpolator(ease).start();
-            labelView.animate().alpha(has ? 1f : 0.8f).setDuration(160).start();
+            labelView.animate().alpha(has ? 1f : 0.55f).setDuration(160).start();
             if (has) focusedKey = key;
         });
         card.setOnClickListener(x -> onClick.run());
