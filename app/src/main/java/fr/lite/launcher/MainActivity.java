@@ -306,7 +306,12 @@ public class MainActivity extends Activity {
         int mode = Build.VERSION.SDK_INT >= 29
                 ? ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), getPackageName())
                 : ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), getPackageName());
-        return mode == AppOpsManager.MODE_ALLOWED;
+        // The appop is reset on boot on Google TV; "pm grant" survives it and shows up as
+        // MODE_DEFAULT + a granted permission.
+        return mode == AppOpsManager.MODE_ALLOWED
+                || (mode == AppOpsManager.MODE_DEFAULT
+                && checkSelfPermission(android.Manifest.permission.PACKAGE_USAGE_STATS)
+                == PackageManager.PERMISSION_GRANTED);
     }
 
     /** Visible apps in user order; unordered apps follow alphabetically. */

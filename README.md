@@ -29,7 +29,7 @@ Ma Chromecast est à l'IP [IP], mode développeur et débogage USB activés, sur
 4. Lance l'aperçu dans le navigateur intégré pour que je valide le design.
 5. Compile l'APK en release et installe-le sur la Chromecast.
 6. Donne l'accès aux statistiques d'usage (rangée Récents) et passe les animations système à 0.5x, avec les commandes ADB de la section Install.
-7. Avant de désactiver le launcher Google (com.google.android.apps.tv.launcherx), demande-moi confirmation et rappelle-moi la commande pour revenir en arrière.
+7. Avant de désactiver les écrans Google (launcherx, tvlauncher, setupwraith), demande-moi confirmation et rappelle-moi les commandes pour revenir en arrière.
 8. Mesure la mémoire utilisée avant et après (dumpsys meminfo), puis guide-moi dans la section "Chromecast optimizations" du README : propose la liste des paquets à désactiver à partir de ceux réellement installés, en m'expliquant chacun, et demande-moi confirmation avant chaque désactivation.
 9. Pousse les modifications sur le dépôt GitHub.
 ```
@@ -47,16 +47,26 @@ Ma Chromecast est à l'IP [IP], mode développeur et débogage USB activés, sur
 
 ## Install
 
+Tested on Chromecast with Google TV (4K, Android 14).
+
 1. On the Chromecast, open Settings > System > About and press "Android TV OS build" 7 times.
-2. Go to Settings > System > Developer options and turn on "USB debugging".
-3. Find the Chromecast IP address in Settings > Network & Internet.
-4. On the PC (same Wi-Fi network):
+2. Settings > System > Developer options: turn on "Wireless debugging" (older versions: "USB debugging").
+3. In Wireless debugging, choose "Pair device with pairing code" and pair from the PC (same Wi-Fi):
 
 ```bash
-adb connect <IP>:5555
+adb pair <IP>:<pairing port> <code>
 ```
 
-Accept the prompt on the TV, then:
+Then connect with the address shown on the main Wireless debugging screen:
+
+```bash
+adb connect <IP>:<port>
+```
+
+A USB-C data cable between the Chromecast power port and the PC also works (`adb -d`). It is the
+safest way to work: it keeps working whatever is on screen.
+
+4. Install and set as home:
 
 ```bash
 adb install -r app-release.apk
@@ -66,19 +76,31 @@ adb install -r app-release.apk
 adb shell cmd package set-home-activity fr.lite.launcher/.MainActivity
 ```
 
+5. Disable the Google home screens. All three are needed: with only `launcherx` disabled, Home falls
+back to `tvlauncher`, then to a black "RecoveryActivity" screen from the setup app (`setupwraith`),
+which outranks any other launcher. The shell cannot disable just that screen on Android 14, so the
+whole setup package is disabled. A factory reset (Settings > System > About, or holding the button on
+the Chromecast) re-enables everything automatically.
+
 ```bash
 adb shell pm disable-user --user 0 com.google.android.apps.tv.launcherx
 ```
 
-The last command disables the stock Google TV launcher. That is what frees most of the RAM.
-
-Allow the "Récents" row to read which apps were used (read only when you return home, no polling):
-
 ```bash
-adb shell appops set fr.lite.launcher GET_USAGE_STATS allow
+adb shell pm disable-user --user 0 com.google.android.tvlauncher
 ```
 
-Make the whole device feel faster by halving system animations:
+```bash
+adb shell pm disable-user --user 0 com.google.android.tungsten.setupwraith
+```
+
+6. Allow the "Récents" row. Use `pm grant`: the `appops` setting is reset on every boot on Google TV.
+
+```bash
+adb shell pm grant fr.lite.launcher android.permission.PACKAGE_USAGE_STATS
+```
+
+7. Make the whole device feel faster by halving system animations:
 
 ```bash
 adb shell settings put global window_animation_scale 0.5
@@ -131,7 +153,7 @@ Check each name exists on the device before disabling it.
 
 Never disable: Google Play services (`com.google.android.gms`, `com.google.android.gsf`), Play Store
 (`com.android.vending`), Assistant and voice search (`com.google.android.katniss`), Cast receiver
-(`com.google.android.apps.mediashell`), setup (`com.google.android.tungsten.setupwraith`), anything
+(`com.google.android.apps.mediashell`), anything
 under `com.android.providers.*`, and anything you are unsure about. When in doubt, leave it.
 
 ### Settings on the TV
@@ -147,6 +169,17 @@ under `com.android.providers.*`, and anything you are unsure about. When in doub
 
 ## Undo
 
+Re-enable the Google home screens and setup app first (otherwise Home has nowhere to go once Lite
+Launcher is uninstalled):
+
+```bash
+adb shell pm enable com.google.android.tungsten.setupwraith
+```
+
+```bash
+adb shell pm enable com.google.android.tvlauncher
+```
+
 ```bash
 adb shell pm enable com.google.android.apps.tv.launcherx
 ```
@@ -158,11 +191,16 @@ adb uninstall fr.lite.launcher
 Restore normal animations by running the three `settings put global` commands above with `1`
 instead of `0.5`.
 
-A Google system update can turn the stock launcher back on. If that happens, run the disable command again.
+A Google system update can turn the stock launcher back on. If that happens, run the disable
+commands again.
 
 ## Build
 
 Requires JDK 17+ and the Android SDK (platform 34, build-tools 34).
+
+If Gradle fails with "Unable to establish loopback connection" on Windows, the JDK cannot create
+its local socket in the temp folder. Point it to a folder you own, e.g.
+`JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:\Users\<you>`.
 
 ```bash
 gradle assembleRelease
