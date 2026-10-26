@@ -5,21 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lite Launcher Preview</title>
 <style>
-  /* Mirrors app/src/main/res: 1 CSS px = 1 dp. Chromecast GTV = 960x540 dp. */
+  /* Mirrors the Android code: 1 CSS px = 1 dp. Chromecast GTV = 960x540 dp. */
   :root {
-    --tile-w: 150px;
-    --tile-h: 84px;
     --gap: 18px;
     --pad: 56px;
     --clay: linear-gradient(180deg, #4B48B8, #2B2980);   /* res/drawable/tile_bg.xml */
-    --warm: linear-gradient(90deg, #F6B27A, #E8687A);    /* res/drawable/pill.xml */
-    --focus: #F5A97F;
     --lavender: #C7C4FF;
   }
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   body { display: flex; align-items: center; justify-content: center; font-family: Roboto, "Segoe UI", sans-serif; }
 
   #tv {
+    /* Accent (MainActivity.ACCENTS), set from JS */
+    --a0: #F6B27A; --a1: #E8687A; --ring: #F5A97F;
+    --warm: linear-gradient(90deg, var(--a0), var(--a1));
     width: 960px; height: 540px; position: relative; overflow: hidden;
     background:
       radial-gradient(circle at 6% 0%, rgba(70,66,210,.85) 0%, rgba(70,66,210,0) 520px),
@@ -27,43 +26,46 @@
     transform-origin: center; flex: none;
   }
   #scroll { position: absolute; inset: 0; overflow: hidden; }
-  #content { padding: 40px var(--pad) 48px; transition: transform .25s ease-out; }
+  #content { padding: 36px var(--pad) 48px; transition: transform .25s ease-out; }
 
+  #greeting { color: var(--lavender); font-size: 18px; font-weight: 500; margin-bottom: 6px; }
   .header { display: flex; align-items: center; }
   #clock { color: #fff; font-size: 56px; font-weight: 600; line-height: 1; letter-spacing: -.01em; }
   #date {
     margin-left: 20px; padding: 6px 16px; border-radius: 999px; background: var(--warm);
-    color: #fff; font-size: 16px; font-weight: 600; box-shadow: 0 6px 16px rgba(232,104,122,.35);
+    color: #fff; font-size: 16px; font-weight: 600; box-shadow: 0 6px 16px color-mix(in srgb, var(--a1) 35%, transparent);
   }
-  .section { margin: 34px 0 16px; color: #9C98E8; font-size: 12px; font-weight: 500; letter-spacing: .22em; }
+  .section { margin: 4px 0 16px; color: #9C98E8; font-size: 12px; font-weight: 500; letter-spacing: .22em; }
+  .section.first { margin-top: 30px; }
 
   .row { display: flex; margin-bottom: calc(var(--gap) * 1.5); }
-  .tile { width: var(--tile-w); margin-right: var(--gap); flex: none; }
+  .tile { margin-right: var(--gap); flex: none; }
   .tile:last-child { margin-right: 0; }
   .card {
-    height: var(--tile-h); border-radius: 16px; background: var(--clay);
+    border-radius: 16px; background: var(--clay);
     position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 0 0 1px rgba(255,255,255,.07), 0 6px 14px rgba(8,6,40,.45);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 6px 14px rgba(8,6,40,.45);
     transition: transform .16s cubic-bezier(.2,.8,.3,1), box-shadow .16s;
   }
   .card .banner {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 20px; color: #fff; letter-spacing: -.01em;
+    font-weight: 700; color: #fff; letter-spacing: -.01em;
   }
-  .card svg { width: 40px; height: 40px; fill: var(--lavender); }
-  .card .glyph { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 22px; color: #fff; }
-  /* Ring drawn above the banner, like android:foreground="@drawable/tile_fg". */
+  .card svg { fill: var(--lavender); }
+  .card .glyph { border-radius: 22%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; }
+  /* Ring drawn above the banner, like the card's foreground drawable. */
   .card::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); pointer-events: none; }
   .tile.focus .card {
     transform: scale(1.08);
-    box-shadow: 0 12px 28px rgba(232,104,122,.5);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--a1) 50%, transparent);
     z-index: 2;
   }
-  .tile.focus .card::after { box-shadow: inset 0 0 0 3px var(--focus); }
+  .tile.focus .card::after { box-shadow: inset 0 0 0 3px var(--ring); }
   .label {
     margin-top: 10px; color: #D8D6FF; opacity: .6; font-size: 13px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .16s, color .16s;
   }
+  .quick .label { font-size: 12px; margin-top: 8px; text-align: center; }
   .tile.focus .label { opacity: 1; color: #fff; }
 
   /* res/values/themes.xml Theme.Lite.Dialog */
@@ -77,8 +79,16 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 20px 40px rgba(5,4,30,.6);
   }
   .sheet h2 { margin: 0 24px 12px; font-size: 18px; font-weight: 600; }
-  .sheet .item { margin: 0 10px; padding: 11px 14px; border-radius: 12px; font-size: 14px; color: #D8D6FF; }
+  .sheet .item { margin: 0 10px; padding: 10px 14px; border-radius: 12px; font-size: 14px; color: #D8D6FF; display: flex; align-items: center; gap: 10px; }
   .sheet .item.focus { background: var(--warm); color: #fff; }
+  .sheet .radio { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; box-sizing: border-box; flex: none; }
+  .sheet .radio.on { background: radial-gradient(circle, currentColor 0 3px, transparent 4px); }
+
+  #toast {
+    position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 20;
+    background: var(--warm); color: #fff; font-size: 14px; font-weight: 600; padding: 9px 20px; border-radius: 999px;
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--a1) 45%, transparent); opacity: 0; transition: opacity .2s; white-space: nowrap;
+  }
 
   #help {
     position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
@@ -91,17 +101,18 @@
 <div id="tv">
   <div id="scroll">
     <div id="content">
+      <div id="greeting"></div>
       <div class="header"><div id="clock"></div><div id="date"></div></div>
-      <div class="section">APPLICATIONS</div>
-      <div id="grid"></div>
+      <div id="sections"></div>
     </div>
   </div>
   <div id="dialog"><div class="sheet"><h2 id="dlg-title"></h2><div id="dlg-items"></div></div></div>
+  <div id="toast"></div>
 </div>
 <div id="help"><kbd>←↑↓→</kbd> naviguer · <kbd>Entrée</kbd> ouvrir · maintenir <kbd>Entrée</kbd> menu · <kbd>Échap</kbd> retour · <kbd>H</kbd> home</div>
 
 <script>
-// Sample apps. banner = leanback banner (gradient + wordmark); otherwise icon on tinted card.
+// Sample apps. banner = leanback banner (gradient + wordmark); otherwise app icon.
 const APPS = [
   { id: 'netflix', label: 'Netflix', banner: ['#000', '#000'], mark: 'NETFLIX', markColor: '#E50914' },
   { id: 'youtube', label: 'YouTube', banner: ['#0f0f0f', '#0f0f0f'], mark: '▶ YouTube', markColor: '#fff' },
@@ -115,120 +126,209 @@ const APPS = [
   { id: 'vlc', label: 'VLC', icon: '#FF8800', glyph: '▲' },
   { id: 'kodi', label: 'Kodi', icon: '#17B2E7', glyph: 'K' },
 ];
-const GEAR = '<svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04,-0.3 0.06,-0.61 0.06,-0.94c0,-0.32 -0.02,-0.64 -0.07,-0.94l2.03,-1.58c0.18,-0.14 0.23,-0.41 0.12,-0.61l-1.92,-3.32c-0.12,-0.22 -0.37,-0.29 -0.59,-0.22l-2.39,0.96c-0.5,-0.38 -1.03,-0.7 -1.62,-0.94L14.4,2.81c-0.04,-0.24 -0.24,-0.41 -0.48,-0.41h-3.84c-0.24,0 -0.43,0.17 -0.47,0.41L9.25,5.35C8.66,5.59 8.12,5.92 7.63,6.29L5.24,5.33c-0.22,-0.08 -0.47,0 -0.59,0.22L2.74,8.87C2.62,9.08 2.66,9.34 2.86,9.48l2.03,1.58C4.84,11.36 4.8,11.69 4.8,12s0.02,0.64 0.07,0.94l-2.03,1.58c-0.18,0.14 -0.23,0.41 -0.12,0.61l1.92,3.32c0.12,0.22 0.37,0.29 0.59,0.22l2.39,-0.96c0.5,0.38 1.03,0.7 1.62,0.94l0.36,2.54c0.05,0.24 0.24,0.41 0.48,0.41h3.84c0.24,0 0.44,-0.17 0.47,-0.41l0.36,-2.54c0.59,-0.24 1.13,-0.56 1.62,-0.94l2.39,0.96c0.22,0.08 0.47,0 0.59,-0.22l1.92,-3.32c0.12,-0.22 0.07,-0.47 -0.12,-0.61L19.14,12.94zM12,15.6c-1.98,0 -3.6,-1.62 -3.6,-3.6s1.62,-3.6 3.6,-3.6s3.6,1.62 3.6,3.6S13.98,15.6 12,15.6z"/></svg>';
-const STORE = '<svg viewBox="0 0 24 24"><path d="M18,6h-2c0,-2.21 -1.79,-4 -4,-4S8,3.79 8,6H6c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2zM12,4c1.1,0 2,0.9 2,2h-4c0,-1.1 0.9,-2 2,-2zM10,17.5v-7l6,3.5 -6,3.5z"/></svg>';
-const EYE ='<svg viewBox="0 0 24 24"><path d="M12,4.5C7,4.5 2.73,7.61 1,12c1.73,4.39 6,7.5 11,7.5s9.27,-3.11 11,-7.5c-1.73,-4.39 -6,-7.5 -11,-7.5zM12,17c-2.76,0 -5,-2.24 -5,-5s2.24,-5 5,-5 5,2.24 5,5 -2.24,5 -5,5zM12,9c-1.66,0 -3,1.34 -3,3s1.34,3 3,3 3,-1.34 3,-3 -1.34,-3 -3,-3z"/></svg>';
+const P = d => `<svg viewBox="0 0 24 24"><path d="${d}"/></svg>`;
+const ICONS = {
+  wifi: P('M1,9l2,2c4.97,-4.97 13.03,-4.97 18,0l2,-2C16.93,2.93 7.08,2.93 1,9zM9,17l3,3 3,-3c-1.65,-1.66 -4.34,-1.66 -6,0zM5,13l2,2c2.76,-2.76 7.24,-2.76 10,0l2,-2C15.14,9.14 8.87,9.14 5,13z'),
+  bt: P('M17.71,7.71L12,2h-1v7.59L6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 11,14.41V22h1l5.71,-5.71 -4.3,-4.29 4.3,-4.29zM13,5.83l1.88,1.88L13,9.59V5.83zM14.88,16.29L13,18.17v-3.76l1.88,1.88z'),
+  display: P('M21,3H3c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h5v2h8v-2h5c1.1,0 1.99,-0.9 1.99,-2L23,5c0,-1.1 -0.9,-2 -2,-2zM21,17H3V5h18v12z'),
+  moon: P('M12.34,2.02C6.59,1.82 2,6.42 2,12c0,5.52 4.48,10 10,10c3.71,0 6.93,-2.02 8.66,-5.02C13.15,16.73 8.57,8.55 12.34,2.02z'),
+  store: P('M18,6h-2c0,-2.21 -1.79,-4 -4,-4S8,3.79 8,6H6c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2zM12,4c1.1,0 2,0.9 2,2h-4c0,-1.1 0.9,-2 2,-2zM10,17.5v-7l6,3.5 -6,3.5z'),
+  gear: P('M19.14,12.94c0.04,-0.3 0.06,-0.61 0.06,-0.94c0,-0.32 -0.02,-0.64 -0.07,-0.94l2.03,-1.58c0.18,-0.14 0.23,-0.41 0.12,-0.61l-1.92,-3.32c-0.12,-0.22 -0.37,-0.29 -0.59,-0.22l-2.39,0.96c-0.5,-0.38 -1.03,-0.7 -1.62,-0.94L14.4,2.81c-0.04,-0.24 -0.24,-0.41 -0.48,-0.41h-3.84c-0.24,0 -0.43,0.17 -0.47,0.41L9.25,5.35C8.66,5.59 8.12,5.92 7.63,6.29L5.24,5.33c-0.22,-0.08 -0.47,0 -0.59,0.22L2.74,8.87C2.62,9.08 2.66,9.34 2.86,9.48l2.03,1.58C4.84,11.36 4.8,11.69 4.8,12s0.02,0.64 0.07,0.94l-2.03,1.58c-0.18,0.14 -0.23,0.41 -0.12,0.61l1.92,3.32c0.12,0.22 0.37,0.29 0.59,0.22l2.39,-0.96c0.5,0.38 1.03,0.7 1.62,0.94l0.36,2.54c0.05,0.24 0.24,0.41 0.48,0.41h3.84c0.24,0 0.44,-0.17 0.47,-0.41l0.36,-2.54c0.59,-0.24 1.13,-0.56 1.62,-0.94l2.39,0.96c0.22,0.08 0.47,0 0.59,-0.22l1.92,-3.32c0.12,-0.22 0.07,-0.47 -0.12,-0.61L19.14,12.94zM12,15.6c-1.98,0 -3.6,-1.62 -3.6,-3.6s1.62,-3.6 3.6,-3.6s3.6,1.62 3.6,3.6S13.98,15.6 12,15.6z'),
+  palette: P('M12,3c-4.97,0 -9,4.03 -9,9s4.03,9 9,9c0.83,0 1.5,-0.67 1.5,-1.5 0,-0.39 -0.15,-0.74 -0.39,-1.01 -0.23,-0.26 -0.38,-0.61 -0.38,-0.99 0,-0.83 0.67,-1.5 1.5,-1.5H16c2.76,0 5,-2.24 5,-5 0,-4.42 -4.03,-8 -9,-8zM6.5,12c-0.83,0 -1.5,-0.67 -1.5,-1.5S5.67,9 6.5,9 8,9.67 8,10.5 7.33,12 6.5,12zM9.5,8C8.67,8 8,7.33 8,6.5S8.67,5 9.5,5s1.5,0.67 1.5,1.5S10.33,8 9.5,8zM14.5,8c-0.83,0 -1.5,-0.67 -1.5,-1.5S13.67,5 14.5,5s1.5,0.67 1.5,1.5S15.33,8 14.5,8zM17.5,12c-0.83,0 -1.5,-0.67 -1.5,-1.5S16.67,9 17.5,9s1.5,0.67 1.5,1.5 -0.67,1.5 -1.5,1.5z'),
+  eye: P('M12,4.5C7,4.5 2.73,7.61 1,12c1.73,4.39 6,7.5 11,7.5s9.27,-3.11 11,-7.5c-1.73,-4.39 -6,-7.5 -11,-7.5zM12,17c-2.76,0 -5,-2.24 -5,-5s2.24,-5 5,-5 5,2.24 5,5 -2.24,5 -5,5zM12,9c-1.66,0 -3,1.34 -3,3s1.34,3 3,3 3,-1.34 3,-3 -1.34,-3 -3,-3z'),
+};
 
+// Same constants as MainActivity.
+const ACCENT_NAMES = ['Corail', 'Cyan', 'Violet'];
+const ACCENTS = [['#F6B27A', '#E8687A', '#F5A97F'], ['#8BE9F5', '#3F9BF5', '#8BE0F5'], ['#D4A5FF', '#8A5CF6', '#C9A2FF']];
+const SIZE_NAMES = ['Petites', 'Normales', 'Grandes'];
+const SIZES = [[128, 72], [150, 84], [184, 104]];
+const FAV_SIZE = [196, 110], QUICK_SIZE = [90, 56], MAX_RECENTS = 5;
+
+const byId = Object.fromEntries(APPS.map(a => [a.id, a]));
 let order = APPS.map(a => a.id);
 let hidden = new Set();
-let tiles = [], cols = 5, focus = 0, dialog = null;
+let fav = new Set(['netflix', 'youtube', 'disney']);
+let recentIds = ['youtube', 'plex', 'netflix', 'spotify', 'arte'];   // simulated usage history
+let accent = 0, sizeIdx = 1;
+let tiles = [], focus = 0, focusedKey = null, dialog = null;
 
-function render(keepId) {
-  const grid = document.getElementById('grid');
-  const pad = 56, gap = 18, tileW = 150;
-  cols = Math.max(3, Math.floor((960 - 2 * pad + gap) / (tileW + gap)));
-  const byId = Object.fromEntries(APPS.map(a => [a.id, a]));
-  tiles = order.filter(id => !hidden.has(id)).map(id => ({ ...byId[id], kind: 'app' }));
-  tiles.push({ id: '#store', label: 'Play Store', svg: STORE, kind: 'sys' });
-  tiles.push({ id: '#settings', label: 'Paramètres', svg: GEAR, kind: 'sys' });
-  if (hidden.size) tiles.push({ id: '#hidden', label: 'Apps masquées', svg: EYE, kind: 'sys' });
+const columns = w => Math.max(1, Math.floor((960 - 2 * 56 + 18) / (w + 18)));
+const visible = () => order.filter(id => !hidden.has(id));
 
-  grid.innerHTML = '';
-  let row;
-  tiles.forEach((t, i) => {
-    if (i % cols === 0) { row = document.createElement('div'); row.className = 'row'; grid.appendChild(row); }
-    const el = document.createElement('div');
-    el.className = 'tile';
-    let inner;
-    if (t.banner) {
-      inner = `<div class="banner" style="background:linear-gradient(135deg,${t.banner[0]},${t.banner[1]});color:${t.markColor || '#fff'}">${t.mark}</div>`;
-    } else if (t.svg) {
-      inner = t.svg;
-    } else {
-      inner = `<div class="glyph" style="background:${t.icon}">${t.glyph}</div>`;
-    }
-    el.innerHTML = `<div class="card">${inner}</div><div class="label">${t.label}</div>`;
-    el.onclick = () => { setFocus(i); activate(); };
-    row.appendChild(el);
-    t.el = el;
-  });
-  const k = keepId ? tiles.findIndex(t => t.id === keepId) : -1;
-  setFocus(k >= 0 ? k : Math.min(focus, tiles.length - 1));
+function tileHtml(t, size) {
+  const [w, h] = size;
+  let inner;
+  if (t.banner) {
+    inner = `<div class="banner" style="font-size:${Math.round(h * .24)}px;background:linear-gradient(135deg,${t.banner[0]},${t.banner[1]});color:${t.markColor || '#fff'}">${t.mark}</div>`;
+  } else {
+    const ic = Math.min(48, Math.round(h * .55));
+    inner = t.svg ? t.svg.replace('<svg', `<svg style="width:${ic}px;height:${ic}px"`)
+      : `<div class="glyph" style="width:${ic}px;height:${ic}px;font-size:${Math.round(ic * .45)}px;background:${t.icon}">${t.glyph}</div>`;
+  }
+  return `<div class="card" style="height:${h}px">${inner}</div><div class="label">${t.label}</div>`;
+}
+
+function render() {
+  const root = document.getElementById('sections');
+  root.innerHTML = '';
+  tiles = [];
+  const size = SIZES[sizeIdx];
+  const vis = visible();
+  const favApps = vis.filter(id => fav.has(id)), rest = vis.filter(id => !fav.has(id));
+  const recents = recentIds.filter(id => vis.includes(id)).slice(0, Math.min(MAX_RECENTS, columns(size[0])));
+  const app = (prefix) => id => ({ ...byId[id], key: prefix + id, kind: 'app' });
+
+  const quick = [
+    { key: '#wifi', label: 'Wi-Fi', svg: ICONS.wifi, msg: 'Ouvre les réglages Wi-Fi' },
+    { key: '#bt', label: 'Bluetooth', svg: ICONS.bt, msg: 'Ouvre les réglages Bluetooth' },
+    { key: '#display', label: 'Affichage', svg: ICONS.display, msg: "Ouvre les réglages d'affichage" },
+    { key: '#dream', label: 'Veille', svg: ICONS.moon, msg: "Ouvre l'économiseur d'écran" },
+    { key: '#store', label: 'Play Store', svg: ICONS.store, msg: 'Ouvre le Play Store' },
+    { key: '#settings', label: 'Paramètres', svg: ICONS.gear, msg: 'Ouvre Paramètres Android' },
+    { key: '#custom', label: 'Style', svg: ICONS.palette, run: openStyleMenu },
+  ];
+  if (hidden.size) quick.push({ key: '#hidden', label: 'Masquées', svg: ICONS.eye, run: openHiddenMenu });
+
+  let first = true;
+  const section = (title, list, sz, cls = '') => {
+    if (!list.length) return;
+    const h = document.createElement('div');
+    h.className = 'section' + (first ? ' first' : ''); h.textContent = title; root.appendChild(h);
+    first = false;
+    const cols = columns(sz[0]);
+    let row;
+    list.forEach((t, i) => {
+      if (i % cols === 0) { row = document.createElement('div'); row.className = 'row'; root.appendChild(row); }
+      const el = document.createElement('div');
+      el.className = 'tile ' + cls; el.style.width = sz[0] + 'px';
+      el.innerHTML = tileHtml(t, sz);
+      const idx = tiles.length;
+      el.onclick = () => { setFocus(idx); activate(); };
+      row.appendChild(el);
+      tiles.push({ ...t, el });
+    });
+  };
+  section('FAVORIS', favApps.map(app('')), FAV_SIZE);
+  section('RÉCENTS', recents.map(app('r:')), size);
+  section('APPLICATIONS', rest.map(app('')), size);
+  section('RÉGLAGES RAPIDES', quick.map(q => ({ ...q, kind: 'sys' })), QUICK_SIZE, 'quick');
+
+  const k = focusedKey ? tiles.findIndex(t => t.key === focusedKey) : -1;
+  focus = 0;
+  setFocus(k >= 0 ? k : 0);
 }
 
 function setFocus(i) {
-  tiles[focus]?.el.classList.remove('focus');
+  tiles.forEach(t => t.el.classList.remove('focus'));
   focus = i;
-  tiles[focus].el.classList.add('focus');
-  // ScrollView-like: keep focused row visible.
-  const rowIdx = Math.floor(focus / cols);
-  const rowH = 84 + 10 + 16 + 27;
-  const top = 40 + 56 + 36 + 16 + 12 + rowIdx * rowH;
-  const shift = Math.max(0, top + rowH + 48 - 540);
-  document.getElementById('content').style.transform = `translateY(${-shift}px)`;
+  const el = tiles[focus].el;
+  el.classList.add('focus');
+  focusedKey = tiles[focus].key;
+  // ScrollView-like: keep the focused tile fully visible.
+  const content = document.getElementById('content');
+  const top = el.offsetTop, bottom = top + el.offsetHeight;
+  const cur = -(parseFloat(content.style.transform.replace(/[^-\d.]/g, '')) || 0);
+  let shift = cur;
+  if (bottom + 48 - shift > 540) shift = bottom + 48 - 540;
+  if (top - 70 < shift) shift = Math.max(0, top - 70);
+  content.style.transform = `translateY(${-shift}px)`;
+}
+
+// Geometric focus search, like Android's default D-pad navigation.
+function moveFocus(dir) {
+  const r0 = tiles[focus].el.getBoundingClientRect();
+  const c0 = { x: r0.left + r0.width / 2, y: r0.top + r0.height / 2 };
+  let best = -1, bestScore = Infinity;
+  tiles.forEach((t, i) => {
+    if (i === focus) return;
+    const r = t.el.getBoundingClientRect();
+    const c = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    const dx = c.x - c0.x, dy = c.y - c0.y;
+    let major, minor;
+    if (dir === 'right') { if (r.left < r0.right - 1) return; major = dx; minor = dy; }
+    if (dir === 'left') { if (r.right > r0.left + 1) return; major = -dx; minor = dy; }
+    if (dir === 'down') { if (r.top < r0.bottom - 1) return; major = dy; minor = dx; }
+    if (dir === 'up') { if (r.bottom > r0.top + 1) return; major = -dy; minor = dx; }
+    const score = 13 * major * major + minor * minor;
+    if (score < bestScore) { bestScore = score; best = i; }
+  });
+  if (best >= 0) setFocus(best);
 }
 
 function activate() {
   const t = tiles[focus];
-  if (t.id === '#hidden') return openHiddenMenu();
-  flash(t.id === '#settings' ? 'Ouvre Paramètres Android'
-      : t.id === '#store' ? 'Ouvre le Play Store' : `Lance ${t.label}`);
+  if (t.run) return t.run();
+  flash(t.msg || `Lance ${t.label}`);
 }
 
 function flash(msg) {
-  let toast = document.getElementById('toast');
-  if (!toast) {
-    toast = document.createElement('div'); toast.id = 'toast';
-    toast.style.cssText = 'position:absolute;bottom:28px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#F6B27A,#E8687A);color:#fff;font-size:14px;font-weight:600;padding:9px 20px;border-radius:999px;box-shadow:0 8px 20px rgba(232,104,122,.45);z-index:20;transition:opacity .2s';
-    document.getElementById('tv').appendChild(toast);
-  }
+  const toast = document.getElementById('toast');
   toast.textContent = msg; toast.style.opacity = 1;
   clearTimeout(flash.t); flash.t = setTimeout(() => toast.style.opacity = 0, 1400);
 }
 
-function openMenu(title, items) {
-  dialog = { items, focus: 0 };
+function openMenu(title, items, checked = -1) {
+  dialog = { items, focus: Math.max(0, checked) };
   document.getElementById('dlg-title').textContent = title;
   const box = document.getElementById('dlg-items');
   box.innerHTML = '';
   items.forEach((it, i) => {
-    const d = document.createElement('div'); d.className = 'item'; d.textContent = it.label;
+    const d = document.createElement('div'); d.className = 'item';
+    d.innerHTML = (checked >= 0 ? `<span class="radio${i === checked ? ' on' : ''}"></span>` : '') + it.label;
     d.onclick = () => { dialog.focus = i; pickMenu(); };
     box.appendChild(d); it.el = d;
   });
-  items[0].el.classList.add('focus');
+  items[dialog.focus].el.classList.add('focus');
   document.getElementById('dialog').classList.add('open');
 }
 function closeMenu() { dialog = null; document.getElementById('dialog').classList.remove('open'); }
 function pickMenu() { const it = dialog.items[dialog.focus]; closeMenu(); it.run(); }
 
+// Moves an app within its own section (favorites or apps), like MainActivity.move.
 function move(id, delta) {
-  const vis = order.filter(x => !hidden.has(x));
-  const from = vis.indexOf(id);
-  const to = delta === -Infinity ? 0 : Math.max(0, Math.min(vis.length - 1, from + delta));
-  vis.splice(from, 1); vis.splice(to, 0, id);
-  order = [...vis, ...order.filter(x => hidden.has(x))];
-  render(id);
+  const vis = visible(), inFav = fav.has(id);
+  const section = vis.filter(x => fav.has(x) === inFav), other = vis.filter(x => fav.has(x) !== inFav);
+  const from = section.indexOf(id);
+  const to = delta === -Infinity ? 0 : Math.max(0, Math.min(section.length - 1, from + delta));
+  section.splice(from, 1); section.splice(to, 0, id);
+  order = [...(inFav ? section : other), ...(inFav ? other : section), ...order.filter(x => hidden.has(x))];
+  focusedKey = id;
+  render();
 }
 
 function openAppMenu() {
   const t = tiles[focus];
   if (t.kind !== 'app') return;
+  const isFav = fav.has(t.id);
   openMenu(t.label, [
+    { label: isFav ? 'Retirer des favoris' : 'Ajouter aux favoris', run: () => { isFav ? fav.delete(t.id) : fav.add(t.id); focusedKey = t.id; render(); } },
     { label: 'Déplacer en premier', run: () => move(t.id, -Infinity) },
     { label: 'Déplacer à gauche', run: () => move(t.id, -1) },
     { label: 'Déplacer à droite', run: () => move(t.id, 1) },
-    { label: 'Masquer', run: () => { hidden.add(t.id); render(); } },
+    { label: 'Masquer', run: () => { hidden.add(t.id); focusedKey = null; render(); } },
     { label: "Infos de l'application", run: () => flash(`Infos de ${t.label}`) },
+    { label: 'Désinstaller', run: () => flash(`Android demande confirmation pour ${t.label}`) },
   ]);
 }
 function openHiddenMenu() {
   const list = APPS.filter(a => hidden.has(a.id));
-  openMenu('Apps masquées', list.map(a => ({ label: 'Afficher ' + a.label, run: () => { hidden.delete(a.id); render(a.id); } })));
+  openMenu('Apps masquées', list.map(a => ({ label: 'Afficher ' + a.label, run: () => { hidden.delete(a.id); focusedKey = a.id; render(); } })));
+}
+function openStyleMenu() {
+  openMenu('Style', [
+    { label: 'Couleur : ' + ACCENT_NAMES[accent], run: () => openMenu('Couleur', ACCENT_NAMES.map((n, i) => ({ label: n, run: () => { accent = i; applyAccent(); render(); } })), accent) },
+    { label: 'Taille des tuiles : ' + SIZE_NAMES[sizeIdx], run: () => openMenu('Taille des tuiles', SIZE_NAMES.map((n, i) => ({ label: n, run: () => { sizeIdx = i; render(); } })), sizeIdx) },
+  ]);
+}
+function applyAccent() {
+  const tv = document.getElementById('tv').style, [a0, a1, ring] = ACCENTS[accent];
+  tv.setProperty('--a0', a0); tv.setProperty('--a1', a1); tv.setProperty('--ring', ring);
 }
 
 // Hold Enter ≥ 500 ms = long press (like holding OK on the remote).
 let holdTimer = null, held = false;
+const DIRS = { ArrowRight: 'right', ArrowLeft: 'left', ArrowDown: 'down', ArrowUp: 'up' };
 document.addEventListener('keydown', e => {
   if (dialog) {
     const n = dialog.items.length;
@@ -240,11 +340,7 @@ document.addEventListener('keydown', e => {
     else if (e.key === 'Escape' || e.key === 'Backspace') closeMenu();
     e.preventDefault(); return;
   }
-  const r = Math.floor(focus / cols), c = focus % cols;
-  if (e.key === 'ArrowRight' && c < cols - 1 && focus + 1 < tiles.length) setFocus(focus + 1);
-  else if (e.key === 'ArrowLeft' && c > 0) setFocus(focus - 1);
-  else if (e.key === 'ArrowDown' && (r + 1) * cols < tiles.length) setFocus(Math.min(focus + cols, tiles.length - 1));
-  else if (e.key === 'ArrowUp' && r > 0) setFocus(focus - cols);
+  if (DIRS[e.key]) moveFocus(DIRS[e.key]);
   else if (e.key === 'Enter' && !e.repeat) { held = false; holdTimer = setTimeout(() => { held = true; openAppMenu(); }, 500); }
   else if (e.key.toLowerCase() === 'h') setFocus(0);
   else return;
@@ -256,7 +352,8 @@ document.addEventListener('keyup', e => {
 document.addEventListener('contextmenu', e => { e.preventDefault(); openAppMenu(); });
 
 function clock() {
-  const now = new Date();
+  const now = new Date(), h = now.getHours();
+  document.getElementById('greeting').textContent = h >= 5 && h < 18 ? 'Bonjour' : h >= 18 && h < 23 ? 'Bonsoir' : 'Bonne nuit';
   document.getElementById('clock').textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const d = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   document.getElementById('date').textContent = d[0].toUpperCase() + d.slice(1);
@@ -266,7 +363,7 @@ function fit() {
   document.getElementById('tv').style.transform = `scale(${s})`;
 }
 addEventListener('resize', fit);
-clock(); setInterval(clock, 10000); fit(); render();
+clock(); setInterval(clock, 10000); fit(); applyAccent(); render();
 </script>
 </body>
 </html>

@@ -2,6 +2,9 @@ package fr.lite.launcher;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.AppOpsManager;
+import android.app.usage.UsageStats;
+import android.app.usage.UsageStatsManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -12,24 +15,35 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 import android.provider.Settings;
 import android.text.format.DateFormat;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -42,17 +56,34 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Minimal Android TV home screen: clock + a grid of installed apps.
+ * Minimal Android TV home screen: greeting, clock, and sections of tiles
+ * (favorites, recents, all apps, quick settings).
  * No background services, no network, no third-party libraries.
  */
 public class MainActivity extends Activity {
 
     private static final String KEY_ORDER = "order";
     private static final String KEY_HIDDEN = "hidden";
-    private static final String KEY_SETTINGS = "#settings";
-    private static final String KEY_HIDDEN_TILE = "#hidden";
-    private static final String KEY_STORE = "#store";
+    private static final String KEY_FAV = "fav";
+    private static final String KEY_ACCENT = "accent";
+    private static final String KEY_SIZE = "size";
     private static final String PLAY_STORE = "com.android.vending";
+    private static final int MAX_RECENTS = 5;
+    private static final long RECENT_WINDOW_MS = 7L * 24 * 60 * 60 * 1000;
+
+    /** Accent palettes: gradient start, gradient end (also the glow), focus ring. */
+    private static final String[] ACCENT_NAMES = {"Corail", "Cyan", "Violet"};
+    private static final int[][] ACCENTS = {
+            {0xFFF6B27A, 0xFFE8687A, 0xFFF5A97F},
+            {0xFF8BE9F5, 0xFF3F9BF5, 0xFF8BE0F5},
+            {0xFFD4A5FF, 0xFF8A5CF6, 0xFFC9A2FF},
+    };
+
+    /** Tile sizes in dp (width, height). */
+    private static final String[] SIZE_NAMES = {"Petites", "Normales", "Grandes"};
+    private static final int[][] SIZES = {{128, 72}, {150, 84}, {184, 104}};
+    private static final int[] FAV_SIZE = {196, 110};
+    private static final int[] QUICK_SIZE = {90, 56};
 
     /** One installed app. */
     private static final class App {
@@ -80,13 +111,17 @@ public class MainActivity extends Activity {
 
     private SharedPreferences prefs;
     private ScrollView scroll;
-    private LinearLayout grid;
+    private LinearLayout sections;
+    private TextView greeting;
     private TextView clock;
     private TextView date;
     private TextView toast;
+    private float density;
 
     /** Every launchable app, hidden ones included. */
     private List<App> allApps = new ArrayList<>();
+    /** Packages by last use, most recent first (unfiltered). */
+    private List<String> recentPkgs = new ArrayList<>();
     private String focusedKey;
 
     private final Runnable tick = new Runnable() {
@@ -110,11 +145,14 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         prefs = getSharedPreferences("launcher", MODE_PRIVATE);
+        density = getResources().getDisplayMetrics().density;
         scroll = findViewById(R.id.scroll);
-        grid = findViewById(R.id.grid);
+        sections = findViewById(R.id.sections);
+        greeting = findViewById(R.id.greeting);
         clock = findViewById(R.id.clock);
         date = findViewById(R.id.date);
         toast = findViewById(R.id.toast);
+        applyAccent();
 
         IntentFilter f = new IntentFilter();
         f.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -122,7 +160,7 @@ public class MainActivity extends Activity {
         f.addAction(Intent.ACTION_PACKAGE_CHANGED);
         f.addAction(Intent.ACTION_PACKAGE_REPLACED);
         f.addDataScheme("package");
-        if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(packageReceiver, f, RECEIVER_EXPORTED);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(packageReceiver, f, RECEIVER_EXPORTED);
         else registerReceiver(packageReceiver, f);
 
         loadApps();
@@ -133,6 +171,7 @@ public class MainActivity extends Activity {
         super.onResume();
         ui.removeCallbacks(tick);
         tick.run();
+        loadRecents();
     }
 
     @Override
@@ -170,6 +209,9 @@ public class MainActivity extends Activity {
         clock.setText(new SimpleDateFormat(pattern, Locale.getDefault()).format(now));
         String d = new SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(now);
         date.setText(d.isEmpty() ? d : Character.toUpperCase(d.charAt(0)) + d.substring(1));
+
+        int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        greeting.setText(h >= 5 && h < 18 ? "Bonjour" : h < 23 && h >= 18 ? "Bonsoir" : "Bonne nuit");
     }
 
     // ---------------------------------------------------------------- apps
@@ -203,9 +245,45 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * Reads last-used times once per return to the home screen (no polling).
+     * Needs usage access, granted once over ADB; without it the row stays hidden.
+     */
+    private void loadRecents() {
+        if (!hasUsageAccess()) return;
+        io.execute(() -> {
+            UsageStatsManager usm = getSystemService(UsageStatsManager.class);
+            long now = System.currentTimeMillis();
+            List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_BEST, now - RECENT_WINDOW_MS, now);
+            Map<String, Long> last = new HashMap<>();
+            if (stats != null) {
+                for (UsageStats s : stats) {
+                    if (s.getTotalTimeInForeground() <= 0) continue;
+                    last.merge(s.getPackageName(), s.getLastTimeUsed(), Math::max);
+                }
+            }
+            List<String> pkgs = new ArrayList<>(last.keySet());
+            pkgs.sort((a, b) -> Long.compare(last.get(b), last.get(a)));
+            ui.post(() -> {
+                if (pkgs.equals(recentPkgs)) return;
+                recentPkgs = pkgs;
+                render();
+            });
+        });
+    }
+
+    @SuppressWarnings("deprecation")
+    private boolean hasUsageAccess() {
+        AppOpsManager ops = getSystemService(AppOpsManager.class);
+        int mode = Build.VERSION.SDK_INT >= 29
+                ? ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), getPackageName())
+                : ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), getPackageName());
+        return mode == AppOpsManager.MODE_ALLOWED;
+    }
+
     /** Visible apps in user order; unordered apps follow alphabetically. */
     private List<App> visibleApps() {
-        Set<String> hidden = hidden();
+        Set<String> hidden = stringSet(KEY_HIDDEN);
         List<String> order = order();
         Map<String, Integer> idx = new HashMap<>();
         for (int i = 0; i < order.size(); i++) idx.put(order.get(i), i);
@@ -261,30 +339,90 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- UI
 
     private void render() {
-        grid.removeAllViews();
-        int tileW = getResources().getDimensionPixelSize(R.dimen.tile_w);
-        int gap = getResources().getDimensionPixelSize(R.dimen.gap);
-        int pad = getResources().getDimensionPixelSize(R.dimen.pad);
-        int width = getResources().getDisplayMetrics().widthPixels - 2 * pad;
-        int cols = Math.max(3, (width + gap) / (tileW + gap));
+        sections.removeAllViews();
+        int[] size = SIZES[sizeIndex()];
+        Set<String> fav = stringSet(KEY_FAV);
 
-        List<View> tiles = new ArrayList<>();
+        List<App> favApps = new ArrayList<>();
+        List<App> rest = new ArrayList<>();
+        Map<String, App> visibleByPkg = new HashMap<>();
         for (App a : visibleApps()) {
-            tiles.add(makeTile(a.pkg(), a.label, a.banner, a.icon, 0,
+            (fav.contains(a.pkg()) ? favApps : rest).add(a);
+            visibleByPkg.put(a.pkg(), a);
+        }
+
+        List<App> recents = new ArrayList<>();
+        int maxRecents = Math.min(MAX_RECENTS, columns(size[0]));
+        for (String pkg : recentPkgs) {
+            App a = visibleByPkg.get(pkg);
+            if (a != null) recents.add(a);
+            if (recents.size() == maxRecents) break;
+        }
+
+        addSection("FAVORIS", appTiles(favApps, "", FAV_SIZE), FAV_SIZE);
+        addSection("RÉCENTS", appTiles(recents, "r:", size), size);
+        addSection("APPLICATIONS", appTiles(rest, "", size), size);
+        addSection("RÉGLAGES RAPIDES", quickTiles(), QUICK_SIZE);
+
+        View target = focusedKey == null ? null : sections.findViewWithTag(focusedKey);
+        if (target != null) target.requestFocus();
+        else focusFirst();
+    }
+
+    private List<View> appTiles(List<App> apps, String keyPrefix, int[] size) {
+        List<View> tiles = new ArrayList<>();
+        for (App a : apps) {
+            tiles.add(makeTile(keyPrefix + a.pkg(), a.label, a.banner, a.icon, 0, size,
                     () -> launch(a), () -> showAppMenu(a)));
         }
-        int lavender = getColor(R.color.lavender);
-        if (!hasApp(PLAY_STORE) && isInstalled(PLAY_STORE)) {
-            tiles.add(makeTile(KEY_STORE, "Play Store", null, getDrawable(R.drawable.ic_store), lavender,
-                    this::openPlayStore, null));
-        }
-        tiles.add(makeTile(KEY_SETTINGS,"Paramètres", null, getDrawable(R.drawable.ic_settings), lavender,
-                () -> startSafely(new Intent(Settings.ACTION_SETTINGS)), null));
-        if (!hidden().isEmpty()) {
-            tiles.add(makeTile(KEY_HIDDEN_TILE, "Apps masquées", null, getDrawable(R.drawable.ic_eye), lavender,
-                    this::showHiddenMenu, null));
-        }
+        return tiles;
+    }
 
+    private List<View> quickTiles() {
+        int lavender = getColor(R.color.lavender);
+        List<View> t = new ArrayList<>();
+        t.add(quick("#wifi", "Wi-Fi", R.drawable.ic_wifi, lavender, Settings.ACTION_WIFI_SETTINGS));
+        t.add(quick("#bt", "Bluetooth", R.drawable.ic_bluetooth, lavender, Settings.ACTION_BLUETOOTH_SETTINGS));
+        t.add(quick("#display", "Affichage", R.drawable.ic_display, lavender, Settings.ACTION_DISPLAY_SETTINGS));
+        t.add(quick("#dream", "Veille", R.drawable.ic_moon, lavender, Settings.ACTION_DREAM_SETTINGS));
+        if (!hasApp(PLAY_STORE) && isInstalled(PLAY_STORE)) {
+            t.add(makeTile("#store", "Play Store", null, getDrawable(R.drawable.ic_store), lavender,
+                    QUICK_SIZE, this::openPlayStore, null));
+        }
+        t.add(quick("#settings", "Paramètres", R.drawable.ic_settings, lavender, Settings.ACTION_SETTINGS));
+        t.add(makeTile("#custom", "Style", null, getDrawable(R.drawable.ic_palette), lavender,
+                QUICK_SIZE, this::showStyleMenu, null));
+        if (!stringSet(KEY_HIDDEN).isEmpty()) {
+            t.add(makeTile("#hidden", "Masquées", null, getDrawable(R.drawable.ic_eye), lavender,
+                    QUICK_SIZE, this::showHiddenMenu, null));
+        }
+        return t;
+    }
+
+    private View quick(String key, String label, int icon, int tint, String action) {
+        return makeTile(key, label, null, getDrawable(icon), tint, QUICK_SIZE,
+                () -> startSafely(new Intent(action)), null);
+    }
+
+    /** Section title + tiles wrapped into rows. Empty sections are skipped. */
+    private void addSection(String title, List<View> tiles, int[] sizeDp) {
+        if (tiles.isEmpty()) return;
+        boolean first = sections.getChildCount() == 0;
+
+        TextView label = new TextView(this);
+        label.setText(title);
+        label.setTextColor(0xFF9C98E8);
+        label.setTextSize(12);
+        label.setLetterSpacing(0.22f);
+        label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(first ? 30 : 4);
+        lp.bottomMargin = dp(16);
+        sections.addView(label, lp);
+
+        int gap = getResources().getDimensionPixelSize(R.dimen.gap);
+        int cols = columns(sizeDp[0]);
         LinearLayout row = null;
         for (int i = 0; i < tiles.size(); i++) {
             if (i % cols == 0) {
@@ -292,35 +430,46 @@ public class MainActivity extends Activity {
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setClipChildren(false);
                 LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                 rp.bottomMargin = gap + gap / 2;
-                grid.addView(row, rp);
+                sections.addView(row, rp);
             }
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    tileW, LinearLayout.LayoutParams.WRAP_CONTENT);
-            if (i % cols != cols - 1) lp.setMarginEnd(gap);
-            row.addView(tiles.get(i), lp);
+            LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
+                    dp(sizeDp[0]), ViewGroup.LayoutParams.WRAP_CONTENT);
+            if (i % cols != cols - 1) tp.setMarginEnd(gap);
+            row.addView(tiles.get(i), tp);
         }
+    }
 
-        View target = focusedKey == null ? null : grid.findViewWithTag(focusedKey);
-        if (target != null) target.requestFocus();
-        else focusFirst();
+    private int columns(int tileWdp) {
+        int gap = getResources().getDimensionPixelSize(R.dimen.gap);
+        int pad = getResources().getDimensionPixelSize(R.dimen.pad);
+        int width = getResources().getDisplayMetrics().widthPixels - 2 * pad;
+        return Math.max(1, (width + gap) / (dp(tileWdp) + gap));
     }
 
     /** iconTint = 0 keeps the icon's own colors. */
-    private View makeTile(String key, String label, Drawable banner, Drawable icon, int iconTint,
+    private View makeTile(String key, String label, Drawable banner, Drawable icon, int iconTint, int[] sizeDp,
                           Runnable onClick, Runnable onLongClick) {
-        View v = getLayoutInflater().inflate(R.layout.tile, grid, false);
+        View v = getLayoutInflater().inflate(R.layout.tile, sections, false);
         FrameLayout card = v.findViewById(R.id.card);
         ImageView bannerView = v.findViewById(R.id.banner);
         ImageView iconView = v.findViewById(R.id.icon);
         TextView labelView = v.findViewById(R.id.label);
+        int[] accent = accent();
+
+        card.getLayoutParams().height = dp(sizeDp[1]);
+        int iconSize = dp(Math.min(48, Math.round(sizeDp[1] * 0.55f)));
+        iconView.getLayoutParams().width = iconSize;
+        iconView.getLayoutParams().height = iconSize;
+        if (sizeDp == QUICK_SIZE) labelView.setTextSize(12);
 
         card.setTag(key);
         card.setClipToOutline(true);
-        // Warm glow under the focused card: a hardware shadow, no blur pass.
-        card.setOutlineSpotShadowColor(getColor(R.color.focus_glow));
-        card.setOutlineAmbientShadowColor(getColor(R.color.focus_glow));
+        card.setForeground(focusRing(accent[2]));
+        // Glow under the focused card: a hardware shadow, no blur pass.
+        card.setOutlineSpotShadowColor(accent[1]);
+        card.setOutlineAmbientShadowColor(accent[1]);
         card.setContentDescription(label);
         labelView.setText(label);
 
@@ -333,13 +482,13 @@ public class MainActivity extends Activity {
             if (iconTint != 0) iconView.setImageTintList(ColorStateList.valueOf(iconTint));
         }
 
-        float lift = 14 * getResources().getDisplayMetrics().density;
+        float lift = 14 * density;
         DecelerateInterpolator ease = new DecelerateInterpolator(2f);
         card.setOnFocusChangeListener((view, has) -> {
             float s = has ? 1.08f : 1f;
             view.animate().scaleX(s).scaleY(s).translationZ(has ? lift : 0)
                     .setDuration(160).setInterpolator(ease).start();
-            labelView.animate().alpha(has ? 1f : 0.55f).setDuration(160).start();
+            labelView.animate().alpha(has ? 1f : 0.6f).setDuration(160).start();
             if (has) focusedKey = key;
         });
         card.setOnClickListener(x -> onClick.run());
@@ -353,53 +502,130 @@ public class MainActivity extends Activity {
     }
 
     private void focusFirst() {
-        if (grid.getChildCount() == 0) return;
-        View first = grid.findViewById(R.id.card);
+        View first = sections.findViewById(R.id.card);
         if (first != null) first.requestFocus();
+    }
+
+    // ---------------------------------------------------------------- accent
+
+    private int[] accent() {
+        return ACCENTS[Math.max(0, Math.min(ACCENTS.length - 1, prefs.getInt(KEY_ACCENT, 0)))];
+    }
+
+    private int sizeIndex() {
+        return Math.max(0, Math.min(SIZES.length - 1, prefs.getInt(KEY_SIZE, 1)));
+    }
+
+    private GradientDrawable gradient(int[] accent, float radiusDp) {
+        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{accent[0], accent[1]});
+        g.setCornerRadius(radiusDp * density);
+        return g;
+    }
+
+    private Drawable focusRing(int color) {
+        GradientDrawable on = new GradientDrawable();
+        on.setCornerRadius(16 * density);
+        on.setStroke(dp(3), color);
+        GradientDrawable off = new GradientDrawable();
+        off.setCornerRadius(16 * density);
+        off.setStroke(dp(1), 0x12FFFFFF);
+        StateListDrawable s = new StateListDrawable();
+        s.addState(new int[]{android.R.attr.state_focused}, on);
+        s.addState(new int[0], off);
+        return s;
+    }
+
+    private void applyAccent() {
+        int[] a = accent();
+        date.setBackground(gradient(a, 999));
+        toast.setBackground(gradient(a, 999));
+        date.setOutlineSpotShadowColor(a[1]);
+        toast.setOutlineSpotShadowColor(a[1]);
     }
 
     // ---------------------------------------------------------------- menus
 
+    /** Shows a dialog whose focused row uses the accent gradient. */
+    private void show(AlertDialog.Builder b) {
+        AlertDialog d = b.show();
+        ListView list = d.getListView();
+        if (list == null) return;
+        StateListDrawable sel = new StateListDrawable();
+        sel.addState(new int[]{android.R.attr.state_focused},
+                new InsetDrawable(gradient(accent(), 12), dp(10), 0, dp(10), 0));
+        sel.addState(new int[0], new ColorDrawable(Color.TRANSPARENT));
+        list.setSelector(sel);
+    }
+
+    private AlertDialog.Builder dialog(String title) {
+        return new AlertDialog.Builder(this, R.style.Theme_Lite_Dialog).setTitle(title);
+    }
+
     private void showAppMenu(App a) {
+        boolean isFav = stringSet(KEY_FAV).contains(a.pkg());
         String[] items = {
+                isFav ? "Retirer des favoris" : "Ajouter aux favoris",
                 "Déplacer en premier",
                 "Déplacer à gauche",
                 "Déplacer à droite",
                 "Masquer",
-                "Infos de l'application"
+                "Infos de l'application",
+                "Désinstaller"
         };
-        new AlertDialog.Builder(this, R.style.Theme_Lite_Dialog)
-                .setTitle(a.label)
-                .setItems(items, (d, which) -> {
-                    switch (which) {
-                        case 0: move(a.pkg(), Integer.MIN_VALUE); break;
-                        case 1: move(a.pkg(), -1); break;
-                        case 2: move(a.pkg(), 1); break;
-                        case 3: setHidden(a.pkg(), true); break;
-                        case 4: startSafely(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.fromParts("package", a.pkg(), null))); break;
-                    }
-                })
-                .show();
+        show(dialog(a.label).setItems(items, (d, which) -> {
+            switch (which) {
+                case 0: toggleSet(KEY_FAV, a.pkg(), !isFav); break;
+                case 1: move(a.pkg(), Integer.MIN_VALUE); break;
+                case 2: move(a.pkg(), -1); break;
+                case 3: move(a.pkg(), 1); break;
+                case 4: toggleSet(KEY_HIDDEN, a.pkg(), true); break;
+                case 5: startSafely(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", a.pkg(), null))); break;
+                case 6: startSafely(new Intent(Intent.ACTION_DELETE,
+                        Uri.fromParts("package", a.pkg(), null))); break;
+            }
+        }));
     }
 
     private void showHiddenMenu() {
-        Set<String> hidden = hidden();
+        Set<String> hidden = stringSet(KEY_HIDDEN);
         List<App> list = new ArrayList<>();
         for (App a : allApps) if (hidden.contains(a.pkg())) list.add(a);
         if (list.isEmpty()) return;
         String[] labels = new String[list.size()];
         for (int i = 0; i < labels.length; i++) labels[i] = "Afficher " + list.get(i).label;
-        new AlertDialog.Builder(this, R.style.Theme_Lite_Dialog)
-                .setTitle("Apps masquées")
-                .setItems(labels, (d, which) -> setHidden(list.get(which).pkg(), false))
-                .show();
+        show(dialog("Apps masquées")
+                .setItems(labels, (d, which) -> toggleSet(KEY_HIDDEN, list.get(which).pkg(), false)));
+    }
+
+    private void showStyleMenu() {
+        String[] items = {
+                "Couleur : " + ACCENT_NAMES[Arrays.asList(ACCENTS).indexOf(accent())],
+                "Taille des tuiles : " + SIZE_NAMES[sizeIndex()]
+        };
+        show(dialog("Style").setItems(items, (d, which) -> {
+            if (which == 0) {
+                show(dialog("Couleur").setSingleChoiceItems(ACCENT_NAMES, prefs.getInt(KEY_ACCENT, 0), (dd, i) -> {
+                    prefs.edit().putInt(KEY_ACCENT, i).apply();
+                    dd.dismiss();
+                    applyAccent();
+                    render();
+                }));
+            } else {
+                show(dialog("Taille des tuiles").setSingleChoiceItems(SIZE_NAMES, sizeIndex(), (dd, i) -> {
+                    prefs.edit().putInt(KEY_SIZE, i).apply();
+                    dd.dismiss();
+                    render();
+                }));
+            }
+        }));
     }
 
     private final Runnable hideToast = () -> toast.animate().alpha(0f).setDuration(200)
             .withEndAction(() -> toast.setVisibility(View.GONE)).start();
 
-    /** Coral pill message drawn in our own window (system toasts can't be styled). */
+    /** Accent pill message drawn in our own window (system toasts can't be styled). */
     private void toast(String msg) {
         toast.setText(msg);
         toast.setVisibility(View.VISIBLE);
@@ -424,31 +650,44 @@ public class MainActivity extends Activity {
         return s.isEmpty() ? new ArrayList<>() : new ArrayList<>(Arrays.asList(s.split("\\|")));
     }
 
-    private Set<String> hidden() {
-        return new HashSet<>(prefs.getStringSet(KEY_HIDDEN, new HashSet<>()));
+    private Set<String> stringSet(String key) {
+        return new HashSet<>(prefs.getStringSet(key, new HashSet<>()));
     }
 
-    /** delta = Integer.MIN_VALUE moves the app to the front. */
+    private void toggleSet(String key, String pkg, boolean add) {
+        Set<String> s = stringSet(key);
+        if (add) s.add(pkg);
+        else s.remove(pkg);
+        prefs.edit().putStringSet(key, s).apply();
+        focusedKey = KEY_HIDDEN.equals(key) && add ? null : pkg;
+        render();
+    }
+
+    /**
+     * Moves an app within its own section (favorites or apps).
+     * delta = Integer.MIN_VALUE moves it to the front.
+     */
     private void move(String pkg, int delta) {
-        List<String> pkgs = new ArrayList<>();
-        for (App a : visibleApps()) pkgs.add(a.pkg());
-        int from = pkgs.indexOf(pkg);
+        Set<String> fav = stringSet(KEY_FAV);
+        boolean inFav = fav.contains(pkg);
+        List<String> section = new ArrayList<>();
+        List<String> other = new ArrayList<>();
+        for (App a : visibleApps()) (fav.contains(a.pkg()) == inFav ? section : other).add(a.pkg());
+
+        int from = section.indexOf(pkg);
         if (from < 0) return;
-        int to = delta == Integer.MIN_VALUE ? 0 : Math.max(0, Math.min(pkgs.size() - 1, from + delta));
-        pkgs.remove(from);
-        pkgs.add(to, pkg);
-        prefs.edit().putString(KEY_ORDER, String.join("|", pkgs)).apply();
+        int to = delta == Integer.MIN_VALUE ? 0 : Math.max(0, Math.min(section.size() - 1, from + delta));
+        section.remove(from);
+        section.add(to, pkg);
+
+        List<String> all = new ArrayList<>(inFav ? section : other);
+        all.addAll(inFav ? other : section);
+        prefs.edit().putString(KEY_ORDER, String.join("|", all)).apply();
         focusedKey = pkg;
         render();
     }
 
-    private void setHidden(String pkg, boolean hide) {
-        Set<String> h = hidden();
-        if (hide) h.add(pkg);
-        else h.remove(pkg);
-        prefs.edit().putStringSet(KEY_HIDDEN, h).apply();
-        if (hide && pkg.equals(focusedKey)) focusedKey = null;
-        if (!hide) focusedKey = pkg;
-        render();
+    private int dp(float v) {
+        return Math.round(v * density);
     }
 }
