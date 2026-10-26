@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lite Launcher Preview</title>
+<style>
+  /* Mirrors app/src/main/res: 1 CSS px = 1 dp. Chromecast GTV = 960x540 dp. */
+  :root {
+    --tile-w: 150px;
+    --tile-h: 84px;
+    --gap: 18px;
+    --pad: 56px;
+    --card: #1C2129;
+  }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: Roboto, "Segoe UI", sans-serif; }
+
+  #tv {
+    width: 960px; height: 540px; position: relative; overflow: hidden;
+    background: radial-gradient(circle at 15% 0%, #1A2230 0%, #08090B 1400px);
+    transform-origin: center; flex: none;
+  }
+  #scroll { position: absolute; inset: 0; overflow: hidden; }
+  #content { padding: 40px var(--pad) 48px; transition: transform .25s ease-out; }
+
+  .header { display: flex; align-items: baseline; }
+  #clock { color: #fff; font-size: 56px; font-weight: 300; line-height: 1; }
+  #date { color: rgba(255,255,255,.55); font-size: 18px; margin-left: 20px; }
+  .section { margin: 36px 0 16px; color: rgba(255,255,255,.35); font-size: 12px; font-weight: 500; letter-spacing: .12em; }
+
+  .row { display: flex; margin-bottom: calc(var(--gap) * 1.5); }
+  .tile { width: var(--tile-w); margin-right: var(--gap); flex: none; }
+  .tile:last-child { margin-right: 0; }
+  .card {
+    height: var(--tile-h); border-radius: 10px; background: var(--card);
+    position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+    transition: transform .16s cubic-bezier(.2,.8,.3,1), box-shadow .16s;
+  }
+  .card .banner {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 20px; color: #fff; letter-spacing: -.01em;
+  }
+  .card svg { width: 44px; height: 44px; fill: #fff; }
+  .card .glyph { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; color: #fff; }
+  .tile.focus .card {
+    transform: scale(1.1);
+    box-shadow: inset 0 0 0 3px #fff, 0 10px 24px rgba(0,0,0,.55);
+    z-index: 2;
+  }
+  .label {
+    margin-top: 10px; color: #fff; opacity: .55; font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .16s;
+  }
+  .tile.focus .label { opacity: 1; }
+
+  /* Dialog approximates Theme.DeviceDefault.Dialog.Alert on Google TV */
+  #dialog {
+    position: absolute; inset: 0; background: rgba(0,0,0,.6); display: none;
+    align-items: center; justify-content: center; z-index: 10;
+  }
+  #dialog.open { display: flex; }
+  .sheet { width: 360px; background: #262a31; border-radius: 12px; padding: 20px 0 10px; color: #fff; }
+  .sheet h2 { margin: 0 24px 12px; font-size: 18px; font-weight: 500; }
+  .sheet .item { padding: 11px 24px; font-size: 14px; color: rgba(255,255,255,.85); }
+  .sheet .item.focus { background: rgba(255,255,255,.14); color: #fff; }
+
+  #help {
+    position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+    color: #888; font-size: 12px; font-family: system-ui, sans-serif; white-space: nowrap;
+  }
+  #help kbd { background: #222; border: 1px solid #444; border-radius: 4px; padding: 1px 5px; color: #ccc; }
+</style>
+</head>
+<body>
+<div id="tv">
+  <div id="scroll">
+    <div id="content">
+      <div class="header"><div id="clock"></div><div id="date"></div></div>
+      <div class="section">APPLICATIONS</div>
+      <div id="grid"></div>
+    </div>
+  </div>
+  <div id="dialog"><div class="sheet"><h2 id="dlg-title"></h2><div id="dlg-items"></div></div></div>
+</div>
+<div id="help"><kbd>←↑↓→</kbd> naviguer · <kbd>Entrée</kbd> ouvrir · maintenir <kbd>Entrée</kbd> menu · <kbd>Échap</kbd> retour · <kbd>H</kbd> home</div>
+
+<script>
+// Sample apps. banner = leanback banner (gradient + wordmark); otherwise icon on tinted card.
+const APPS = [
+  { id: 'netflix', label: 'Netflix', banner: ['#000', '#000'], mark: 'NETFLIX', markColor: '#E50914' },
+  { id: 'youtube', label: 'YouTube', banner: ['#0f0f0f', '#0f0f0f'], mark: '▶ YouTube', markColor: '#fff' },
+  { id: 'prime', label: 'Prime Video', banner: ['#00A8E1', '#0F79AF'], mark: 'prime video' },
+  { id: 'disney', label: 'Disney+', banner: ['#0E1A3C', '#1A3A7A'], mark: 'Disney+' },
+  { id: 'canal', label: 'myCANAL', banner: ['#000', '#111'], mark: 'CANAL+' },
+  { id: 'spotify', label: 'Spotify', icon: '#1DB954', glyph: 'S' },
+  { id: 'plex', label: 'Plex', banner: ['#1f1f1f', '#282A2D'], mark: 'plex', markColor: '#E5A00D' },
+  { id: 'twitch', label: 'Twitch', icon: '#9146FF', glyph: 'T' },
+  { id: 'arte', label: 'ARTE', banner: ['#FA481C', '#d93a12'], mark: 'ARTE' },
+  { id: 'vlc', label: 'VLC', icon: '#FF8800', glyph: '▲' },
+  { id: 'kodi', label: 'Kodi', icon: '#17B2E7', glyph: 'K' },
+];
+const GEAR = '<svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04,-0.3 0.06,-0.61 0.06,-0.94c0,-0.32 -0.02,-0.64 -0.07,-0.94l2.03,-1.58c0.18,-0.14 0.23,-0.41 0.12,-0.61l-1.92,-3.32c-0.12,-0.22 -0.37,-0.29 -0.59,-0.22l-2.39,0.96c-0.5,-0.38 -1.03,-0.7 -1.62,-0.94L14.4,2.81c-0.04,-0.24 -0.24,-0.41 -0.48,-0.41h-3.84c-0.24,0 -0.43,0.17 -0.47,0.41L9.25,5.35C8.66,5.59 8.12,5.92 7.63,6.29L5.24,5.33c-0.22,-0.08 -0.47,0 -0.59,0.22L2.74,8.87C2.62,9.08 2.66,9.34 2.86,9.48l2.03,1.58C4.84,11.36 4.8,11.69 4.8,12s0.02,0.64 0.07,0.94l-2.03,1.58c-0.18,0.14 -0.23,0.41 -0.12,0.61l1.92,3.32c0.12,0.22 0.37,0.29 0.59,0.22l2.39,-0.96c0.5,0.38 1.03,0.7 1.62,0.94l0.36,2.54c0.05,0.24 0.24,0.41 0.48,0.41h3.84c0.24,0 0.44,-0.17 0.47,-0.41l0.36,-2.54c0.59,-0.24 1.13,-0.56 1.62,-0.94l2.39,0.96c0.22,0.08 0.47,0 0.59,-0.22l1.92,-3.32c0.12,-0.22 0.07,-0.47 -0.12,-0.61L19.14,12.94zM12,15.6c-1.98,0 -3.6,-1.62 -3.6,-3.6s1.62,-3.6 3.6,-3.6s3.6,1.62 3.6,3.6S13.98,15.6 12,15.6z"/></svg>';
+const STORE = '<svg viewBox="0 0 24 24"><path d="M18,6h-2c0,-2.21 -1.79,-4 -4,-4S8,3.79 8,6H6c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2zM12,4c1.1,0 2,0.9 2,2h-4c0,-1.1 0.9,-2 2,-2zM10,17.5v-7l6,3.5 -6,3.5z"/></svg>';
+const EYE ='<svg viewBox="0 0 24 24"><path d="M12,4.5C7,4.5 2.73,7.61 1,12c1.73,4.39 6,7.5 11,7.5s9.27,-3.11 11,-7.5c-1.73,-4.39 -6,-7.5 -11,-7.5zM12,17c-2.76,0 -5,-2.24 -5,-5s2.24,-5 5,-5 5,2.24 5,5 -2.24,5 -5,5zM12,9c-1.66,0 -3,1.34 -3,3s1.34,3 3,3 3,-1.34 3,-3 -1.34,-3 -3,-3z"/></svg>';
+
+let order = APPS.map(a => a.id);
+let hidden = new Set();
+let tiles = [], cols = 5, focus = 0, dialog = null;
+
+// Same as MainActivity.tintOf: muted, dark version of the icon color.
+function tint(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  const s = Math.min(max ? d / max : 0, 0.55), v = 0.26, hue = ((h * 60) % 360 + 360) % 360;
+  const f = k => { const x = (k + hue / 60) % 6; return Math.round(255 * (v - v * s * Math.max(0, Math.min(x, 4 - x, 1)))); };
+  return `rgb(${f(5)},${f(3)},${f(1)})`;
+}
+
+function render(keepId) {
+  const grid = document.getElementById('grid');
+  const pad = 56, gap = 18, tileW = 150;
+  cols = Math.max(3, Math.floor((960 - 2 * pad + gap) / (tileW + gap)));
+  const byId = Object.fromEntries(APPS.map(a => [a.id, a]));
+  tiles = order.filter(id => !hidden.has(id)).map(id => ({ ...byId[id], kind: 'app' }));
+  tiles.push({ id: '#store', label: 'Play Store', svg: STORE, kind: 'sys' });
+  tiles.push({ id: '#settings', label: 'Paramètres', svg: GEAR, kind: 'sys' });
+  if (hidden.size) tiles.push({ id: '#hidden', label: 'Apps masquées', svg: EYE, kind: 'sys' });
+
+  grid.innerHTML = '';
+  let row;
+  tiles.forEach((t, i) => {
+    if (i % cols === 0) { row = document.createElement('div'); row.className = 'row'; grid.appendChild(row); }
+    const el = document.createElement('div');
+    el.className = 'tile';
+    let inner;
+    if (t.banner) {
+      inner = `<div class="banner" style="background:linear-gradient(135deg,${t.banner[0]},${t.banner[1]});color:${t.markColor || '#fff'}">${t.mark}</div>`;
+    } else if (t.svg) {
+      inner = t.svg;
+    } else {
+      inner = `<div class="glyph" style="background:${t.icon}">${t.glyph}</div>`;
+    }
+    const bg = t.icon && !t.banner ? `style="background:${tint(t.icon)}"` : '';
+    el.innerHTML = `<div class="card" ${bg}>${inner}</div><div class="label">${t.label}</div>`;
+    el.onclick = () => { setFocus(i); activate(); };
+    row.appendChild(el);
+    t.el = el;
+  });
+  const k = keepId ? tiles.findIndex(t => t.id === keepId) : -1;
+  setFocus(k >= 0 ? k : Math.min(focus, tiles.length - 1));
+}
+
+function setFocus(i) {
+  tiles[focus]?.el.classList.remove('focus');
+  focus = i;
+  tiles[focus].el.classList.add('focus');
+  // ScrollView-like: keep focused row visible.
+  const rowIdx = Math.floor(focus / cols);
+  const rowH = 84 + 10 + 16 + 27;
+  const top = 40 + 56 + 36 + 16 + 12 + rowIdx * rowH;
+  const shift = Math.max(0, top + rowH + 48 - 540);
+  document.getElementById('content').style.transform = `translateY(${-shift}px)`;
+}
+
+function activate() {
+  const t = tiles[focus];
+  if (t.id === '#hidden') return openHiddenMenu();
+  flash(t.id === '#settings' ? 'Ouvre Paramètres Android'
+      : t.id === '#store' ? 'Ouvre le Play Store' : `Lance ${t.label}`);
+}
+
+function flash(msg) {
+  let toast = document.getElementById('toast');
+  if (!toast) {
+    toast = document.createElement('div'); toast.id = 'toast';
+    toast.style.cssText = 'position:absolute;bottom:28px;left:50%;transform:translateX(-50%);background:#2b2f36;color:#fff;font-size:13px;padding:8px 16px;border-radius:18px;z-index:20;transition:opacity .2s';
+    document.getElementById('tv').appendChild(toast);
+  }
+  toast.textContent = msg; toast.style.opacity = 1;
+  clearTimeout(flash.t); flash.t = setTimeout(() => toast.style.opacity = 0, 1400);
+}
+
+function openMenu(title, items) {
+  dialog = { items, focus: 0 };
+  document.getElementById('dlg-title').textContent = title;
+  const box = document.getElementById('dlg-items');
+  box.innerHTML = '';
+  items.forEach((it, i) => {
+    const d = document.createElement('div'); d.className = 'item'; d.textContent = it.label;
+    d.onclick = () => { dialog.focus = i; pickMenu(); };
+    box.appendChild(d); it.el = d;
+  });
+  items[0].el.classList.add('focus');
+  document.getElementById('dialog').classList.add('open');
+}
+function closeMenu() { dialog = null; document.getElementById('dialog').classList.remove('open'); }
+function pickMenu() { const it = dialog.items[dialog.focus]; closeMenu(); it.run(); }
+
+function move(id, delta) {
+  const vis = order.filter(x => !hidden.has(x));
+  const from = vis.indexOf(id);
+  const to = delta === -Infinity ? 0 : Math.max(0, Math.min(vis.length - 1, from + delta));
+  vis.splice(from, 1); vis.splice(to, 0, id);
+  order = [...vis, ...order.filter(x => hidden.has(x))];
+  render(id);
+}
+
+function openAppMenu() {
+  const t = tiles[focus];
+  if (t.kind !== 'app') return;
+  openMenu(t.label, [
+    { label: 'Déplacer en premier', run: () => move(t.id, -Infinity) },
+    { label: 'Déplacer à gauche', run: () => move(t.id, -1) },
+    { label: 'Déplacer à droite', run: () => move(t.id, 1) },
+    { label: 'Masquer', run: () => { hidden.add(t.id); render(); } },
+    { label: "Infos de l'application", run: () => flash(`Infos de ${t.label}`) },
+  ]);
+}
+function openHiddenMenu() {
+  const list = APPS.filter(a => hidden.has(a.id));
+  openMenu('Apps masquées', list.map(a => ({ label: 'Afficher ' + a.label, run: () => { hidden.delete(a.id); render(a.id); } })));
+}
+
+// Hold Enter ≥ 500 ms = long press (like holding OK on the remote).
+let holdTimer = null, held = false;
+document.addEventListener('keydown', e => {
+  if (dialog) {
+    const n = dialog.items.length;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      dialog.items[dialog.focus].el.classList.remove('focus');
+      dialog.focus = (dialog.focus + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+      dialog.items[dialog.focus].el.classList.add('focus');
+    } else if (e.key === 'Enter' && !e.repeat) pickMenu();
+    else if (e.key === 'Escape' || e.key === 'Backspace') closeMenu();
+    e.preventDefault(); return;
+  }
+  const r = Math.floor(focus / cols), c = focus % cols;
+  if (e.key === 'ArrowRight' && c < cols - 1 && focus + 1 < tiles.length) setFocus(focus + 1);
+  else if (e.key === 'ArrowLeft' && c > 0) setFocus(focus - 1);
+  else if (e.key === 'ArrowDown' && (r + 1) * cols < tiles.length) setFocus(Math.min(focus + cols, tiles.length - 1));
+  else if (e.key === 'ArrowUp' && r > 0) setFocus(focus - cols);
+  else if (e.key === 'Enter' && !e.repeat) { held = false; holdTimer = setTimeout(() => { held = true; openAppMenu(); }, 500); }
+  else if (e.key.toLowerCase() === 'h') setFocus(0);
+  else return;
+  e.preventDefault();
+});
+document.addEventListener('keyup', e => {
+  if (e.key === 'Enter' && holdTimer) { clearTimeout(holdTimer); holdTimer = null; if (!held && !dialog) activate(); }
+});
+document.addEventListener('contextmenu', e => { e.preventDefault(); openAppMenu(); });
+
+function clock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const d = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  document.getElementById('date').textContent = d[0].toUpperCase() + d.slice(1);
+}
+function fit() {
+  const s = Math.min(innerWidth / 960, (innerHeight - 30) / 540);
+  document.getElementById('tv').style.transform = `scale(${s})`;
+}
+addEventListener('resize', fit);
+clock(); setInterval(clock, 10000); fit(); render();
+</script>
+</body>
+</html>
