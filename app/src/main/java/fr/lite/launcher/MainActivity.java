@@ -26,7 +26,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -60,14 +59,12 @@ public class MainActivity extends Activity {
         final ComponentName cn;
         final boolean leanback;
         final String label;
-        final Drawable banner;
         final Drawable icon;
 
-        App(ComponentName cn, boolean leanback, String label, Drawable banner, Drawable icon) {
+        App(ComponentName cn, boolean leanback, String label, Drawable icon) {
             this.cn = cn;
             this.leanback = leanback;
             this.label = label;
-            this.banner = banner;
             this.icon = icon;
         }
 
@@ -84,6 +81,7 @@ public class MainActivity extends Activity {
     private LinearLayout grid;
     private TextView clock;
     private TextView date;
+    private TextView toast;
 
     /** Every launchable app, hidden ones included. */
     private List<App> allApps = new ArrayList<>();
@@ -114,6 +112,7 @@ public class MainActivity extends Activity {
         grid = findViewById(R.id.grid);
         clock = findViewById(R.id.clock);
         date = findViewById(R.id.date);
+        toast = findViewById(R.id.toast);
 
         IntentFilter f = new IntentFilter();
         f.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -192,13 +191,11 @@ public class MainActivity extends Activity {
         for (ResolveInfo ri : pm.queryIntentActivities(i, 0)) {
             ActivityInfo ai = ri.activityInfo;
             if (ai.packageName.equals(getPackageName()) || out.containsKey(ai.packageName)) continue;
-            Drawable banner = leanback ? ai.loadBanner(pm) : null;
             out.put(ai.packageName, new App(
                     new ComponentName(ai.packageName, ai.name),
                     leanback,
                     ri.loadLabel(pm).toString(),
-                    banner,
-                    banner == null ? ri.loadIcon(pm) : null));
+                    ri.loadIcon(pm)));
         }
     }
 
@@ -229,7 +226,7 @@ public class MainActivity extends Activity {
         try {
             startActivity(i);
         } catch (Exception e) {
-            Toast.makeText(this, "Impossible d'ouvrir " + a.label, Toast.LENGTH_SHORT).show();
+            toast("Impossible d'ouvrir " + a.label);
         }
     }
 
@@ -262,6 +259,7 @@ public class MainActivity extends Activity {
     private void render() {
         grid.removeAllViews();
         int tileW = getResources().getDimensionPixelSize(R.dimen.tile_w);
+        int tileH = getResources().getDimensionPixelSize(R.dimen.tile_h);
         int gap = getResources().getDimensionPixelSize(R.dimen.gap);
         int pad = getResources().getDimensionPixelSize(R.dimen.pad);
         int width = getResources().getDisplayMetrics().widthPixels - 2 * pad;
@@ -269,18 +267,18 @@ public class MainActivity extends Activity {
 
         List<View> tiles = new ArrayList<>();
         for (App a : visibleApps()) {
-            tiles.add(makeTile(a.pkg(), a.label, a.banner, a.icon, 0,
+            tiles.add(makeTile(a.pkg(), a.label, a.icon, 0,
                     () -> launch(a), () -> showAppMenu(a)));
         }
         int lavender = getColor(R.color.lavender);
         if (!hasApp(PLAY_STORE) && isInstalled(PLAY_STORE)) {
-            tiles.add(makeTile(KEY_STORE, "Play Store", null, getDrawable(R.drawable.ic_store), lavender,
+            tiles.add(makeTile(KEY_STORE, "Play Store", getDrawable(R.drawable.ic_store), lavender,
                     this::openPlayStore, null));
         }
-        tiles.add(makeTile(KEY_SETTINGS,"Paramètres", null, getDrawable(R.drawable.ic_settings), lavender,
+        tiles.add(makeTile(KEY_SETTINGS,"Paramètres", getDrawable(R.drawable.ic_settings), lavender,
                 () -> startSafely(new Intent(Settings.ACTION_SETTINGS)), null));
         if (!hidden().isEmpty()) {
-            tiles.add(makeTile(KEY_HIDDEN_TILE, "Apps masquées", null, getDrawable(R.drawable.ic_eye), lavender,
+            tiles.add(makeTile(KEY_HIDDEN_TILE, "Apps masquées", getDrawable(R.drawable.ic_eye), lavender,
                     this::showHiddenMenu, null));
         }
 
@@ -295,8 +293,7 @@ public class MainActivity extends Activity {
                 rp.bottomMargin = gap + gap / 2;
                 grid.addView(row, rp);
             }
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    tileW, LinearLayout.LayoutParams.WRAP_CONTENT);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, tileH);
             if (i % cols != cols - 1) lp.setMarginEnd(gap);
             row.addView(tiles.get(i), lp);
         }
@@ -307,11 +304,10 @@ public class MainActivity extends Activity {
     }
 
     /** iconTint = 0 keeps the icon's own colors. */
-    private View makeTile(String key, String label, Drawable banner, Drawable icon, int iconTint,
+    private View makeTile(String key, String label, Drawable icon, int iconTint,
                           Runnable onClick, Runnable onLongClick) {
         View v = getLayoutInflater().inflate(R.layout.tile, grid, false);
-        FrameLayout card = v.findViewById(R.id.card);
-        ImageView bannerView = v.findViewById(R.id.banner);
+        FrameLayout card = (FrameLayout) v;
         ImageView iconView = v.findViewById(R.id.icon);
         TextView labelView = v.findViewById(R.id.label);
 
@@ -323,13 +319,12 @@ public class MainActivity extends Activity {
         card.setContentDescription(label);
         labelView.setText(label);
 
-        if (banner != null) {
-            bannerView.setImageDrawable(banner);
-            iconView.setVisibility(View.GONE);
-        } else {
-            bannerView.setVisibility(View.GONE);
-            iconView.setImageDrawable(icon);
-            if (iconTint != 0) iconView.setImageTintList(ColorStateList.valueOf(iconTint));
+        iconView.setImageDrawable(icon);
+        if (iconTint != 0) {
+            // System glyphs render at 44dp inside the 60dp icon slot.
+            int p = Math.round(8 * getResources().getDisplayMetrics().density);
+            iconView.setPadding(p, p, p, p);
+            iconView.setImageTintList(ColorStateList.valueOf(iconTint));
         }
 
         float lift = 14 * getResources().getDisplayMetrics().density;
@@ -338,7 +333,7 @@ public class MainActivity extends Activity {
             float s = has ? 1.08f : 1f;
             view.animate().scaleX(s).scaleY(s).translationZ(has ? lift : 0)
                     .setDuration(160).setInterpolator(ease).start();
-            labelView.animate().alpha(has ? 1f : 0.55f).setDuration(160).start();
+            labelView.animate().alpha(has ? 1f : 0.8f).setDuration(160).start();
             if (has) focusedKey = key;
         });
         card.setOnClickListener(x -> onClick.run());
@@ -395,11 +390,24 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    private final Runnable hideToast = () -> toast.animate().alpha(0f).setDuration(200)
+            .withEndAction(() -> toast.setVisibility(View.GONE)).start();
+
+    /** Coral pill message drawn in our own window (system toasts can't be styled). */
+    private void toast(String msg) {
+        toast.setText(msg);
+        toast.setVisibility(View.VISIBLE);
+        toast.animate().cancel();
+        toast.animate().alpha(1f).setDuration(150).start();
+        ui.removeCallbacks(hideToast);
+        ui.postDelayed(hideToast, 1800);
+    }
+
     private void startSafely(Intent i) {
         try {
             startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (Exception e) {
-            Toast.makeText(this, "Action indisponible", Toast.LENGTH_SHORT).show();
+            toast("Action indisponible");
         }
     }
 

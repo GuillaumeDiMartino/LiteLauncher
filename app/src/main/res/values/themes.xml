@@ -19,8 +19,8 @@
     <color name="lavender">#C7C4FF</color>
     <color name="focus_glow">#E8687A</color>
 
-    <dimen name="tile_w">150dp</dimen>
-    <dimen name="tile_h">84dp</dimen>
+    <dimen name="tile_w">116dp</dimen>
+    <dimen name="tile_h">160dp</dimen>
     <dimen name="gap">18dp</dimen>
     <dimen name="pad">56dp</dimen>
 </resources>
