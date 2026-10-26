@@ -1,44 +1,62 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  Tile root. The glow sits behind the card and only shows when focused: a pre-rendered
+  bitmap, so focus costs no shadow computation and looks the same everywhere on screen.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="@dimen/tile_w"
     android:layout_height="wrap_content"
-    android:clipChildren="false"
-    android:orientation="vertical">
+    android:clipChildren="false">
 
-    <FrameLayout
-        android:id="@+id/card"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/tile_h"
-        android:background="@drawable/tile_bg"
-        android:clickable="true"
-        android:focusable="true"
-        android:foreground="@drawable/tile_fg">
+    <ImageView
+        android:id="@+id/glow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:alpha="0"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY" />
 
-        <ImageView
-            android:id="@+id/banner"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no"
-            android:scaleType="centerCrop" />
-
-        <ImageView
-            android:id="@+id/icon"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_gravity="center"
-            android:importantForAccessibility="no"
-            android:scaleType="fitCenter" />
-    </FrameLayout>
-
-    <TextView
-        android:id="@+id/label"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:alpha="0.6"
-        android:ellipsize="end"
-        android:fontFamily="sans-serif"
-        android:singleLine="true"
-        android:textColor="#D8D6FF"
-        android:textSize="13sp" />
-</LinearLayout>
+        android:clipChildren="false"
+        android:orientation="vertical">
+
+        <FrameLayout
+            android:id="@+id/card"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/tile_h"
+            android:background="@drawable/tile_bg"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="@drawable/tile_fg">
+
+            <ImageView
+                android:id="@+id/banner"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:importantForAccessibility="no"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/icon"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:alpha="0.6"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif"
+            android:singleLine="true"
+            android:textColor="#D8D6FF"
+            android:textSize="13sp" />
+    </LinearLayout>
+</FrameLayout>

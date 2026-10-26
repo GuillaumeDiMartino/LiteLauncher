@@ -13,7 +13,11 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
+import android.graphics.BlurMaskFilter;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Shader;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
@@ -83,6 +87,10 @@ public class MainActivity extends Activity {
     private static final int[][] SIZES = {{128, 72}, {150, 84}, {184, 104}};
     private static final int[] FAV_SIZE = {196, 110};
     private static final int[] QUICK_SIZE = {90, 56};
+    /** How far the glow spreads around a card, in dp. */
+    private static final int GLOW_DP = 18;
+    /** Where a focused row stops, from the top of the screen (leaves room for its title). */
+    private static final int ROW_PIN_DP = 48;
 
     /** One installed app. */
     private static final class App {
@@ -126,6 +134,8 @@ public class MainActivity extends Activity {
     private String focusedKey;
     /** First row of tiles; focusing it scrolls back to the very top. */
     private View firstRow;
+    private final Map<String, Bitmap> glowCache = new HashMap<>();
+    private final Map<String, Drawable> bannerCache = new HashMap<>();
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -147,10 +157,11 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        density = getResources().getDisplayMetrics().density;
+        bakeBackground();
         prefs = getSharedPreferences("launcher", MODE_PRIVATE);
         String r = prefs.getString(KEY_RECENTS, "");
         if (!r.isEmpty()) recentPkgs = new ArrayList<>(Arrays.asList(r.split("\\|")));
-        density = getResources().getDisplayMetrics().density;
         scroll = findViewById(R.id.scroll);
         sections = findViewById(R.id.sections);
         greeting = findViewById(R.id.greeting);
@@ -233,6 +244,7 @@ public class MainActivity extends Activity {
             List<App> list = new ArrayList<>(byPkg.values());
             ui.post(() -> {
                 allApps = list;
+                bannerCache.clear();
                 render();
             });
         });
@@ -479,16 +491,23 @@ public class MainActivity extends Activity {
         if (sizeDp == QUICK_SIZE) labelView.setTextSize(12);
 
         card.setTag(key);
-        card.setClipToOutline(true);
         card.setForeground(focusRing(accent[2]));
-        // Glow under the focused card: a hardware shadow, no blur pass.
-        card.setOutlineSpotShadowColor(accent[1]);
-        card.setOutlineAmbientShadowColor(accent[1]);
         card.setContentDescription(label);
+
+        // Glow: a cached pre-blurred bitmap behind the card, same look at every screen position.
+        ImageView glowView = v.findViewById(R.id.glow);
+        FrameLayout.LayoutParams gp = (FrameLayout.LayoutParams) glowView.getLayoutParams();
+        gp.width = dp(sizeDp[0] + 2 * GLOW_DP);
+        gp.height = dp(sizeDp[1] + 2 * GLOW_DP);
+        gp.leftMargin = gp.topMargin = -dp(GLOW_DP);
+        glowView.setImageDrawable(glow(sizeDp, accent[1]));
+        // No outline on the root: Z only orders the focused tile above its neighbours, no shadow.
+        v.setOutlineProvider(null);
         labelView.setText(label);
 
         if (banner != null) {
-            bannerView.setImageDrawable(banner);
+            // Corners baked into the bitmap: no per-frame rounded clipping on the GPU.
+            bannerView.setImageDrawable(rounded(key, banner, sizeDp));
             iconView.setVisibility(View.GONE);
         } else {
             bannerView.setVisibility(View.GONE);
@@ -496,18 +515,16 @@ public class MainActivity extends Activity {
             if (iconTint != 0) iconView.setImageTintList(ColorStateList.valueOf(iconTint));
         }
 
-        float lift = 14 * density;
         DecelerateInterpolator ease = new DecelerateInterpolator(2f);
         card.setOnFocusChangeListener((view, has) -> {
             float s = has ? 1.08f : 1f;
-            view.animate().scaleX(s).scaleY(s).translationZ(has ? lift : 0)
-                    .setDuration(160).setInterpolator(ease).start();
-            labelView.animate().alpha(has ? 1f : 0.6f).setDuration(160).start();
+            v.setTranslationZ(has ? 1 : 0);
+            view.animate().scaleX(s).scaleY(s).setDuration(120).setInterpolator(ease).start();
+            glowView.animate().alpha(has ? 1f : 0f).setDuration(120).start();
+            labelView.setAlpha(has ? 1f : 0.6f);
             if (has) {
                 focusedKey = key;
-                // ScrollView only scrolls enough to show the tile; on the first row,
-                // go all the way up so the greeting and clock come back into view.
-                if (view.getParent().getParent() == firstRow) scroll.post(() -> scroll.smoothScrollTo(0, 0));
+                scrollToRow(view);
             }
         });
         card.setOnClickListener(x -> onClick.run());
@@ -518,6 +535,84 @@ public class MainActivity extends Activity {
             });
         }
         return v;
+    }
+
+    /**
+     * Row-by-row scrolling: the focused row always lands just under its section title, so
+     * rows stop at the same place and the row above never shows half cut. First row: top.
+     */
+    private void scrollToRow(View tile) {
+        View row = tile;
+        while (row.getParent() != sections) row = (View) row.getParent();
+        View content = (View) sections.getParent();
+        int target = row == firstRow ? 0
+                : content.getTop() + sections.getTop() + row.getTop() - dp(ROW_PIN_DP);
+        if (target != scroll.getScrollY()) scroll.smoothScrollTo(0, Math.max(0, target));
+    }
+
+    /** Soft accent glow, blurred once at quarter resolution and shared by same-size tiles. */
+    private Drawable glow(int[] sizeDp, int color) {
+        String k = sizeDp[0] + "x" + sizeDp[1] + "#" + color;
+        Bitmap b = glowCache.get(k);
+        if (b == null) {
+            float q = density / 4f;
+            int w = Math.round((sizeDp[0] + 2 * GLOW_DP) * q), h = Math.round((sizeDp[1] + 2 * GLOW_DP) * q);
+            b = Bitmap.createBitmap(Math.max(1, w), Math.max(1, h), Bitmap.Config.ARGB_8888);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setColor(color);
+            p.setAlpha(150);
+            p.setMaskFilter(new BlurMaskFilter(14 * q, BlurMaskFilter.Blur.NORMAL));
+            float in = (GLOW_DP - 2) * q;
+            new Canvas(b).drawRoundRect(in, in + 4 * q, w - in, h - in + 4 * q, 16 * q, 16 * q, p);
+            glowCache.put(k, b);
+        }
+        BitmapDrawable d = new BitmapDrawable(getResources(), b);
+        d.setFilterBitmap(true);
+        return d;
+    }
+
+    /** Banner pre-rendered at the exact tile size with rounded corners, cached per size. */
+    private Drawable rounded(String key, Drawable banner, int[] sizeDp) {
+        String k = key + "@" + sizeDp[0];
+        Drawable cached = bannerCache.get(k);
+        if (cached != null) return cached;
+        int w = dp(sizeDp[0]), h = dp(sizeDp[1]);
+        Bitmap src = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        int iw = banner.getIntrinsicWidth(), ih = banner.getIntrinsicHeight();
+        if (iw > 0 && ih > 0) {
+            float sc = Math.max((float) w / iw, (float) h / ih);
+            int sw = Math.round(iw * sc), sh = Math.round(ih * sc);
+            banner.setBounds((w - sw) / 2, (h - sh) / 2, (w - sw) / 2 + sw, (h - sh) / 2 + sh);
+        } else {
+            banner.setBounds(0, 0, w, h);
+        }
+        banner.draw(new Canvas(src));
+        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setShader(new BitmapShader(src, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
+        new Canvas(out).drawRoundRect(0, 0, w, h, 16 * density, 16 * density, p);
+        src.recycle();
+        Drawable d = new BitmapDrawable(getResources(), out);
+        bannerCache.put(k, d);
+        return d;
+    }
+
+    /**
+     * The gradient background baked once into a quarter-resolution bitmap: the GPU then
+     * draws one texture per frame instead of two full-screen gradient passes.
+     */
+    private void bakeBackground() {
+        int w = getResources().getDisplayMetrics().widthPixels;
+        int h = getResources().getDisplayMetrics().heightPixels;
+        Bitmap b = Bitmap.createBitmap(Math.max(1, w / 4), Math.max(1, h / 4), Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        c.scale(0.25f, 0.25f);
+        Drawable bg = getDrawable(R.drawable.bg);
+        bg.setBounds(0, 0, w, h);
+        bg.draw(c);
+        BitmapDrawable d = new BitmapDrawable(getResources(), b);
+        d.setFilterBitmap(true);
+        getWindow().setBackgroundDrawable(d);
     }
 
     private void focusFirst() {
