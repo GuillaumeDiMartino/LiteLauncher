@@ -538,16 +538,41 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Row-by-row scrolling: the focused row always lands just under its section title, so
-     * rows stop at the same place and the row above never shows half cut. First row: top.
+     * Scrolls only when the focused row is not fully on screen. Going down, the view stops on a
+     * row boundary (a row just under its title at the top), so no tile is left half cut.
+     * Going up, the row lands just under its title. First row: back to the very top.
      */
     private void scrollToRow(View tile) {
         View row = tile;
         while (row.getParent() != sections) row = (View) row.getParent();
-        View content = (View) sections.getParent();
-        int target = row == firstRow ? 0
-                : content.getTop() + sections.getTop() + row.getTop() - dp(ROW_PIN_DP);
-        if (target != scroll.getScrollY()) scroll.smoothScrollTo(0, Math.max(0, target));
+        if (row == firstRow) {
+            if (scroll.getScrollY() != 0) scroll.smoothScrollTo(0, 0);
+            return;
+        }
+        int base = ((View) sections.getParent()).getTop() + sections.getTop();
+        int top = base + row.getTop(), bottom = base + row.getBottom();
+        int y = scroll.getScrollY(), h = scroll.getHeight();
+        int pin = dp(ROW_PIN_DP), margin = dp(GLOW_DP);
+        if (top - margin >= y && bottom + margin <= y + h) return;   // fully visible: stay put
+
+        int target;
+        if (top < y) {
+            target = top - pin;
+        } else {
+            // First row boundary that brings the focused row fully into view.
+            int needed = bottom + margin - h;
+            target = top - pin;
+            for (int i = 0; i < sections.getChildCount(); i++) {
+                View r = sections.getChildAt(i);
+                if (!(r instanceof LinearLayout)) continue;
+                int t = base + r.getTop() - pin;
+                if (t >= needed) {
+                    target = Math.min(t, target);
+                    break;
+                }
+            }
+        }
+        scroll.smoothScrollTo(0, Math.max(0, target));
     }
 
     /** Soft accent glow, blurred once at quarter resolution and shared by same-size tiles. */
