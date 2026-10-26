@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <inset android:insetLeft="10dp" android:insetRight="10dp">
+            <shape>
+                <gradient
+                    android:angle="0"
+                    android:endColor="#E8687A"
+                    android:startColor="#F6B27A" />
+                <corners android:radius="12dp" />
+            </shape>
+        </inset>
+    </item>
+    <item android:drawable="@android:color/transparent" />
+</selector>

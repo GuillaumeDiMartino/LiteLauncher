@@ -1,10 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <gradient
-        android:centerX="0.15"
-        android:centerY="0.0"
-        android:endColor="#08090B"
-        android:gradientRadius="1400dp"
-        android:startColor="#1A2230"
-        android:type="radial" />
-</shape>
+<!-- Drawn once as the window background: no per-frame cost. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <gradient
+                android:angle="315"
+                android:endColor="#121139"
+                android:startColor="#1D1C58"
+                android:type="linear" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <gradient
+                android:centerX="0.06"
+                android:centerY="0.0"
+                android:endColor="#004642D2"
+                android:gradientRadius="520dp"
+                android:startColor="#D94642D2"
+                android:type="radial" />
+        </shape>
+    </item>
+</layer-list>

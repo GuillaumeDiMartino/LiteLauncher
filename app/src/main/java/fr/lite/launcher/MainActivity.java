@@ -12,9 +12,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.ColorStateList;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
@@ -65,15 +62,13 @@ public class MainActivity extends Activity {
         final String label;
         final Drawable banner;
         final Drawable icon;
-        final int tint;
 
-        App(ComponentName cn, boolean leanback, String label, Drawable banner, Drawable icon, int tint) {
+        App(ComponentName cn, boolean leanback, String label, Drawable banner, Drawable icon) {
             this.cn = cn;
             this.leanback = leanback;
             this.label = label;
             this.banner = banner;
             this.icon = icon;
-            this.tint = tint;
         }
 
         String pkg() {
@@ -198,14 +193,12 @@ public class MainActivity extends Activity {
             ActivityInfo ai = ri.activityInfo;
             if (ai.packageName.equals(getPackageName()) || out.containsKey(ai.packageName)) continue;
             Drawable banner = leanback ? ai.loadBanner(pm) : null;
-            Drawable icon = ri.loadIcon(pm);
             out.put(ai.packageName, new App(
                     new ComponentName(ai.packageName, ai.name),
                     leanback,
                     ri.loadLabel(pm).toString(),
                     banner,
-                    icon,
-                    banner == null ? tintOf(icon) : 0));
+                    banner == null ? ri.loadIcon(pm) : null));
         }
     }
 
@@ -276,17 +269,18 @@ public class MainActivity extends Activity {
 
         List<View> tiles = new ArrayList<>();
         for (App a : visibleApps()) {
-            tiles.add(makeTile(a.pkg(), a.label, a.banner, a.icon, a.tint,
+            tiles.add(makeTile(a.pkg(), a.label, a.banner, a.icon, 0,
                     () -> launch(a), () -> showAppMenu(a)));
         }
+        int lavender = getColor(R.color.lavender);
         if (!hasApp(PLAY_STORE) && isInstalled(PLAY_STORE)) {
-            tiles.add(makeTile(KEY_STORE, "Play Store", null, getDrawable(R.drawable.ic_store), 0,
+            tiles.add(makeTile(KEY_STORE, "Play Store", null, getDrawable(R.drawable.ic_store), lavender,
                     this::openPlayStore, null));
         }
-        tiles.add(makeTile(KEY_SETTINGS,"Paramètres", null, getDrawable(R.drawable.ic_settings), 0,
+        tiles.add(makeTile(KEY_SETTINGS,"Paramètres", null, getDrawable(R.drawable.ic_settings), lavender,
                 () -> startSafely(new Intent(Settings.ACTION_SETTINGS)), null));
         if (!hidden().isEmpty()) {
-            tiles.add(makeTile(KEY_HIDDEN_TILE, "Apps masquées", null, getDrawable(R.drawable.ic_eye), 0,
+            tiles.add(makeTile(KEY_HIDDEN_TILE, "Apps masquées", null, getDrawable(R.drawable.ic_eye), lavender,
                     this::showHiddenMenu, null));
         }
 
@@ -312,7 +306,8 @@ public class MainActivity extends Activity {
         else focusFirst();
     }
 
-    private View makeTile(String key, String label, Drawable banner, Drawable icon, int tint,
+    /** iconTint = 0 keeps the icon's own colors. */
+    private View makeTile(String key, String label, Drawable banner, Drawable icon, int iconTint,
                           Runnable onClick, Runnable onLongClick) {
         View v = getLayoutInflater().inflate(R.layout.tile, grid, false);
         FrameLayout card = v.findViewById(R.id.card);
@@ -322,6 +317,9 @@ public class MainActivity extends Activity {
 
         card.setTag(key);
         card.setClipToOutline(true);
+        // Warm glow under the focused card: a hardware shadow, no blur pass.
+        card.setOutlineSpotShadowColor(getColor(R.color.focus_glow));
+        card.setOutlineAmbientShadowColor(getColor(R.color.focus_glow));
         card.setContentDescription(label);
         labelView.setText(label);
 
@@ -331,13 +329,13 @@ public class MainActivity extends Activity {
         } else {
             bannerView.setVisibility(View.GONE);
             iconView.setImageDrawable(icon);
-            if (tint != 0) card.setBackgroundTintList(ColorStateList.valueOf(tint));
+            if (iconTint != 0) iconView.setImageTintList(ColorStateList.valueOf(iconTint));
         }
 
-        float lift = 10 * getResources().getDisplayMetrics().density;
+        float lift = 14 * getResources().getDisplayMetrics().density;
         DecelerateInterpolator ease = new DecelerateInterpolator(2f);
         card.setOnFocusChangeListener((view, has) -> {
-            float s = has ? 1.1f : 1f;
+            float s = has ? 1.08f : 1f;
             view.animate().scaleX(s).scaleY(s).translationZ(has ? lift : 0)
                     .setDuration(160).setInterpolator(ease).start();
             labelView.animate().alpha(has ? 1f : 0.55f).setDuration(160).start();
@@ -369,7 +367,7 @@ public class MainActivity extends Activity {
                 "Masquer",
                 "Infos de l'application"
         };
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        new AlertDialog.Builder(this, R.style.Theme_Lite_Dialog)
                 .setTitle(a.label)
                 .setItems(items, (d, which) -> {
                     switch (which) {
@@ -391,7 +389,7 @@ public class MainActivity extends Activity {
         if (list.isEmpty()) return;
         String[] labels = new String[list.size()];
         for (int i = 0; i < labels.length; i++) labels[i] = "Afficher " + list.get(i).label;
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        new AlertDialog.Builder(this, R.style.Theme_Lite_Dialog)
                 .setTitle("Apps masquées")
                 .setItems(labels, (d, which) -> setHidden(list.get(which).pkg(), false))
                 .show();
@@ -438,35 +436,5 @@ public class MainActivity extends Activity {
         if (hide && pkg.equals(focusedKey)) focusedKey = null;
         if (!hide) focusedKey = pkg;
         render();
-    }
-
-    // ---------------------------------------------------------------- util
-
-    /** Muted, dark card color derived from the app icon. */
-    private static int tintOf(Drawable icon) {
-        if (icon == null) return 0;
-        Drawable d = icon.getConstantState() != null ? icon.getConstantState().newDrawable().mutate() : icon;
-        Bitmap b = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888);
-        d.setBounds(0, 0, 8, 8);
-        d.draw(new Canvas(b));
-        long r = 0, g = 0, bl = 0;
-        int n = 0;
-        for (int y = 0; y < 8; y++) {
-            for (int x = 0; x < 8; x++) {
-                int p = b.getPixel(x, y);
-                if (Color.alpha(p) < 128) continue;
-                r += Color.red(p);
-                g += Color.green(p);
-                bl += Color.blue(p);
-                n++;
-            }
-        }
-        b.recycle();
-        if (n == 0) return 0;
-        float[] hsv = new float[3];
-        Color.colorToHSV(Color.rgb((int) (r / n), (int) (g / n), (int) (bl / n)), hsv);
-        hsv[1] = Math.min(hsv[1], 0.55f);
-        hsv[2] = 0.26f;
-        return Color.HSVToColor(hsv);
     }
 }

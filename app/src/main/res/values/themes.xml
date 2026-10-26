@@ -2,9 +2,22 @@
 <resources>
     <style name="Theme.Lite" parent="android:Theme.DeviceDefault.NoActionBar.Fullscreen">
         <item name="android:windowBackground">@drawable/bg</item>
-        <item name="android:colorAccent">#FFFFFF</item>
+        <item name="android:colorAccent">#F5A97F</item>
         <item name="android:windowDisablePreview">false</item>
     </style>
+
+    <style name="Theme.Lite.Dialog" parent="android:Theme.DeviceDefault.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_bg</item>
+        <item name="android:colorBackground">#2B2980</item>
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="android:textColorAlertDialogListItem">#E6E4FF</item>
+        <item name="android:listSelector">@drawable/dialog_item</item>
+        <item name="android:colorAccent">#F5A97F</item>
+        <item name="android:backgroundDimAmount">0.65</item>
+    </style>
+
+    <color name="lavender">#C7C4FF</color>
+    <color name="focus_glow">#E8687A</color>
 
     <dimen name="tile_w">150dp</dimen>
     <dimen name="tile_h">84dp</dimen>

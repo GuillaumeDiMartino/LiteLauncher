@@ -11,60 +11,74 @@
     --tile-h: 84px;
     --gap: 18px;
     --pad: 56px;
-    --card: #1C2129;
+    --clay: linear-gradient(180deg, #4B48B8, #2B2980);   /* res/drawable/tile_bg.xml */
+    --warm: linear-gradient(90deg, #F6B27A, #E8687A);    /* res/drawable/pill.xml */
+    --focus: #F5A97F;
+    --lavender: #C7C4FF;
   }
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   body { display: flex; align-items: center; justify-content: center; font-family: Roboto, "Segoe UI", sans-serif; }
 
   #tv {
     width: 960px; height: 540px; position: relative; overflow: hidden;
-    background: radial-gradient(circle at 15% 0%, #1A2230 0%, #08090B 1400px);
+    background:
+      radial-gradient(circle at 6% 0%, rgba(70,66,210,.85) 0%, rgba(70,66,210,0) 520px),
+      linear-gradient(160deg, #1D1C58, #121139);
     transform-origin: center; flex: none;
   }
   #scroll { position: absolute; inset: 0; overflow: hidden; }
   #content { padding: 40px var(--pad) 48px; transition: transform .25s ease-out; }
 
-  .header { display: flex; align-items: baseline; }
-  #clock { color: #fff; font-size: 56px; font-weight: 300; line-height: 1; }
-  #date { color: rgba(255,255,255,.55); font-size: 18px; margin-left: 20px; }
-  .section { margin: 36px 0 16px; color: rgba(255,255,255,.35); font-size: 12px; font-weight: 500; letter-spacing: .12em; }
+  .header { display: flex; align-items: center; }
+  #clock { color: #fff; font-size: 56px; font-weight: 600; line-height: 1; letter-spacing: -.01em; }
+  #date {
+    margin-left: 20px; padding: 6px 16px; border-radius: 999px; background: var(--warm);
+    color: #fff; font-size: 16px; font-weight: 600; box-shadow: 0 6px 16px rgba(232,104,122,.35);
+  }
+  .section { margin: 34px 0 16px; color: #9C98E8; font-size: 12px; font-weight: 500; letter-spacing: .22em; }
 
   .row { display: flex; margin-bottom: calc(var(--gap) * 1.5); }
   .tile { width: var(--tile-w); margin-right: var(--gap); flex: none; }
   .tile:last-child { margin-right: 0; }
   .card {
-    height: var(--tile-h); border-radius: 10px; background: var(--card);
+    height: var(--tile-h); border-radius: 16px; background: var(--clay);
     position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 0 0 1px rgba(255,255,255,.07), 0 6px 14px rgba(8,6,40,.45);
     transition: transform .16s cubic-bezier(.2,.8,.3,1), box-shadow .16s;
   }
   .card .banner {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     font-weight: 700; font-size: 20px; color: #fff; letter-spacing: -.01em;
   }
-  .card svg { width: 44px; height: 44px; fill: #fff; }
-  .card .glyph { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; color: #fff; }
+  .card svg { width: 40px; height: 40px; fill: var(--lavender); }
+  .card .glyph { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 22px; color: #fff; }
+  /* Ring drawn above the banner, like android:foreground="@drawable/tile_fg". */
+  .card::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); pointer-events: none; }
   .tile.focus .card {
-    transform: scale(1.1);
-    box-shadow: inset 0 0 0 3px #fff, 0 10px 24px rgba(0,0,0,.55);
+    transform: scale(1.08);
+    box-shadow: 0 12px 28px rgba(232,104,122,.5);
     z-index: 2;
   }
+  .tile.focus .card::after { box-shadow: inset 0 0 0 3px var(--focus); }
   .label {
-    margin-top: 10px; color: #fff; opacity: .55; font-size: 13px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .16s;
+    margin-top: 10px; color: #D8D6FF; opacity: .6; font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .16s, color .16s;
   }
-  .tile.focus .label { opacity: 1; }
+  .tile.focus .label { opacity: 1; color: #fff; }
 
-  /* Dialog approximates Theme.DeviceDefault.Dialog.Alert on Google TV */
+  /* res/values/themes.xml Theme.Lite.Dialog */
   #dialog {
-    position: absolute; inset: 0; background: rgba(0,0,0,.6); display: none;
+    position: absolute; inset: 0; background: rgba(10,9,40,.65); display: none;
     align-items: center; justify-content: center; z-index: 10;
   }
   #dialog.open { display: flex; }
-  .sheet { width: 360px; background: #262a31; border-radius: 12px; padding: 20px 0 10px; color: #fff; }
-  .sheet h2 { margin: 0 24px 12px; font-size: 18px; font-weight: 500; }
-  .sheet .item { padding: 11px 24px; font-size: 14px; color: rgba(255,255,255,.85); }
-  .sheet .item.focus { background: rgba(255,255,255,.14); color: #fff; }
+  .sheet {
+    width: 360px; background: var(--clay); border-radius: 20px; padding: 20px 0 12px; color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 20px 40px rgba(5,4,30,.6);
+  }
+  .sheet h2 { margin: 0 24px 12px; font-size: 18px; font-weight: 600; }
+  .sheet .item { margin: 0 10px; padding: 11px 14px; border-radius: 12px; font-size: 14px; color: #D8D6FF; }
+  .sheet .item.focus { background: var(--warm); color: #fff; }
 
   #help {
     position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
@@ -109,17 +123,6 @@ let order = APPS.map(a => a.id);
 let hidden = new Set();
 let tiles = [], cols = 5, focus = 0, dialog = null;
 
-// Same as MainActivity.tintOf: muted, dark version of the icon color.
-function tint(hex) {
-  const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-  let h = 0;
-  if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  const s = Math.min(max ? d / max : 0, 0.55), v = 0.26, hue = ((h * 60) % 360 + 360) % 360;
-  const f = k => { const x = (k + hue / 60) % 6; return Math.round(255 * (v - v * s * Math.max(0, Math.min(x, 4 - x, 1)))); };
-  return `rgb(${f(5)},${f(3)},${f(1)})`;
-}
-
 function render(keepId) {
   const grid = document.getElementById('grid');
   const pad = 56, gap = 18, tileW = 150;
@@ -144,8 +147,7 @@ function render(keepId) {
     } else {
       inner = `<div class="glyph" style="background:${t.icon}">${t.glyph}</div>`;
     }
-    const bg = t.icon && !t.banner ? `style="background:${tint(t.icon)}"` : '';
-    el.innerHTML = `<div class="card" ${bg}>${inner}</div><div class="label">${t.label}</div>`;
+    el.innerHTML = `<div class="card">${inner}</div><div class="label">${t.label}</div>`;
     el.onclick = () => { setFocus(i); activate(); };
     row.appendChild(el);
     t.el = el;
@@ -177,7 +179,7 @@ function flash(msg) {
   let toast = document.getElementById('toast');
   if (!toast) {
     toast = document.createElement('div'); toast.id = 'toast';
-    toast.style.cssText = 'position:absolute;bottom:28px;left:50%;transform:translateX(-50%);background:#2b2f36;color:#fff;font-size:13px;padding:8px 16px;border-radius:18px;z-index:20;transition:opacity .2s';
+    toast.style.cssText = 'position:absolute;bottom:28px;left:50%;transform:translateX(-50%);background:#3A378F;color:#fff;font-size:13px;padding:8px 16px;border-radius:18px;z-index:20;transition:opacity .2s';
     document.getElementById('tv').appendChild(toast);
   }
   toast.textContent = msg; toast.style.opacity = 1;

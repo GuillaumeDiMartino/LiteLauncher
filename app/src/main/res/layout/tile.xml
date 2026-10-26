@@ -23,8 +23,8 @@
 
         <ImageView
             android:id="@+id/icon"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:layout_gravity="center"
             android:importantForAccessibility="no"
             android:scaleType="fitCenter" />
@@ -35,10 +35,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:alpha="0.55"
+        android:alpha="0.6"
         android:ellipsize="end"
         android:fontFamily="sans-serif"
         android:singleLine="true"
-        android:textColor="#FFFFFF"
+        android:textColor="#D8D6FF"
         android:textSize="13sp" />
 </LinearLayout>
