@@ -180,12 +180,12 @@ function render() {
   const app = (prefix) => id => ({ ...byId[id], key: prefix + id, kind: 'app' });
 
   const quick = [
-    { key: '#wifi', label: 'Wi-Fi', svg: ICONS.wifi, msg: 'Ouvre les réglages Wi-Fi' },
-    { key: '#bt', label: 'Bluetooth', svg: ICONS.bt, msg: 'Ouvre les réglages Bluetooth' },
-    { key: '#display', label: 'Affichage', svg: ICONS.display, msg: "Ouvre les réglages d'affichage" },
-    { key: '#dream', label: 'Veille', svg: ICONS.moon, msg: "Ouvre l'économiseur d'écran" },
-    { key: '#store', label: 'Play Store', svg: ICONS.store, msg: 'Ouvre le Play Store' },
-    { key: '#settings', label: 'Paramètres', svg: ICONS.gear, msg: 'Ouvre Paramètres Android' },
+    { key: '#wifi', label: 'Wi-Fi', svg: ICONS.wifi },
+    { key: '#bt', label: 'Bluetooth', svg: ICONS.bt },
+    { key: '#display', label: 'Affichage', svg: ICONS.display },
+    { key: '#dream', label: 'Veille', svg: ICONS.moon },
+    { key: '#store', label: 'Play Store', svg: ICONS.store },
+    { key: '#settings', label: 'Paramètres', svg: ICONS.gear },
     { key: '#custom', label: 'Style', svg: ICONS.palette, run: openStyleMenu },
   ];
   if (hidden.size) quick.push({ key: '#hidden', label: 'Masquées', svg: ICONS.eye, run: openHiddenMenu });
@@ -259,7 +259,7 @@ function moveFocus(dir) {
 function activate() {
   const t = tiles[focus];
   if (t.run) return t.run();
-  flash(t.msg || `Lance ${t.label}`);
+  flash(t.label);
 }
 
 function flash(msg) {
@@ -307,8 +307,8 @@ function openAppMenu() {
     { label: 'Déplacer à gauche', run: () => move(t.id, -1) },
     { label: 'Déplacer à droite', run: () => move(t.id, 1) },
     { label: 'Masquer', run: () => { hidden.add(t.id); focusedKey = null; render(); } },
-    { label: "Infos de l'application", run: () => flash(`Infos de ${t.label}`) },
-    { label: 'Désinstaller', run: () => flash(`Android demande confirmation pour ${t.label}`) },
+    { label: "Infos de l'application", run: () => flash(t.label) },
+    { label: 'Désinstaller', run: () => flash(t.label) },
   ]);
 }
 function openHiddenMenu() {
