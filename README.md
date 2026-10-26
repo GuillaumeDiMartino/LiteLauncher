@@ -3,6 +3,30 @@
 A minimal home screen for Chromecast with Google TV: a clock, the date, and a grid of your apps.
 No recommendations, no ads, no background services, no network access, no libraries.
 
+## Resume with Claude on another PC
+
+Prerequisites: the Claude app (Code tab) and Git installed. On the Chromecast, enable developer mode
+(Settings > System > About > press "Android TV OS build" 7 times), turn on USB debugging, and note its IP.
+
+Paste this prompt in Claude, replacing `[IP]`:
+
+```text
+Clone https://github.com/GuillaumeDiMartino/LiteLauncher.git puis lis le README et le code.
+
+Contexte : c'est un launcher Android TV ultra léger que j'ai conçu pour remplacer l'écran d'accueil Google TV de ma Chromecast avec Google TV, qui rame. Java natif sans aucune bibliothèque, horloge + grille d'apps, menu appui long (déplacer, masquer), tuiles Play Store et Paramètres. Le dossier preview/ contient une maquette HTML fidèle (960x540 dp) qui sert à travailler le design avant de le reporter dans le code Android.
+
+Ma Chromecast est à l'IP [IP], mode développeur et débogage USB activés, sur le même Wi-Fi que ce PC.
+
+Étapes :
+1. Installe ce qu'il manque : ADB (platform-tools), JDK 17+, SDK Android (platform 34, build-tools 34), Gradle. Demande-moi avant chaque téléchargement.
+2. Connecte-toi à la Chromecast avec adb connect (j'accepterai la fenêtre sur la TV).
+3. Récupère les vraies bannières TV et icônes de mes apps installées, et branche-les dans preview/index.html à la place des logos d'exemple, avec la liste réelle de mes apps.
+4. Lance l'aperçu dans le navigateur intégré pour que je valide le design.
+5. Compile l'APK en release et installe-le sur la Chromecast.
+6. Avant de désactiver le launcher Google (com.google.android.apps.tv.launcherx), demande-moi confirmation et rappelle-moi la commande pour revenir en arrière.
+7. Pousse les modifications sur le dépôt GitHub.
+```
+
 ## Remote control
 
 - Arrows to move, OK to open an app.
