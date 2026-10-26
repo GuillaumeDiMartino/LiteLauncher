@@ -123,6 +123,8 @@ public class MainActivity extends Activity {
     /** Packages by last use, most recent first (unfiltered). */
     private List<String> recentPkgs = new ArrayList<>();
     private String focusedKey;
+    /** First row of tiles; focusing it scrolls back to the very top. */
+    private View firstRow;
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -340,6 +342,7 @@ public class MainActivity extends Activity {
 
     private void render() {
         sections.removeAllViews();
+        firstRow = null;
         int[] size = SIZES[sizeIndex()];
         Set<String> fav = stringSet(KEY_FAV);
 
@@ -433,6 +436,7 @@ public class MainActivity extends Activity {
                         ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                 rp.bottomMargin = gap + gap / 2;
                 sections.addView(row, rp);
+                if (firstRow == null) firstRow = row;
             }
             LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
                     dp(sizeDp[0]), ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -489,7 +493,12 @@ public class MainActivity extends Activity {
             view.animate().scaleX(s).scaleY(s).translationZ(has ? lift : 0)
                     .setDuration(160).setInterpolator(ease).start();
             labelView.animate().alpha(has ? 1f : 0.6f).setDuration(160).start();
-            if (has) focusedKey = key;
+            if (has) {
+                focusedKey = key;
+                // ScrollView only scrolls enough to show the tile; on the first row,
+                // go all the way up so the greeting and clock come back into view.
+                if (view.getParent().getParent() == firstRow) scroll.post(() -> scroll.smoothScrollTo(0, 0));
+            }
         });
         card.setOnClickListener(x -> onClick.run());
         if (onLongClick != null) {

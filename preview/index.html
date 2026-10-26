@@ -232,6 +232,8 @@ function setFocus(i) {
   let shift = cur;
   if (bottom + 48 - shift > 540) shift = bottom + 48 - 540;
   if (top - 70 < shift) shift = Math.max(0, top - 70);
+  // First row: scroll all the way up so the greeting and clock show again.
+  if (top === tiles[0].el.offsetTop) shift = 0;
   content.style.transform = `translateY(${-shift}px)`;
 }
 
