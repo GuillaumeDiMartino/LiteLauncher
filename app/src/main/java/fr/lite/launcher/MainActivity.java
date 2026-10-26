@@ -2,9 +2,6 @@ package fr.lite.launcher;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.AppOpsManager;
-import android.app.usage.UsageStats;
-import android.app.usage.UsageStatsManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -30,7 +27,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.Process;
 import android.provider.Settings;
 import android.text.format.DateFormat;
 import android.view.View;
@@ -70,9 +66,9 @@ public class MainActivity extends Activity {
     private static final String KEY_FAV = "fav";
     private static final String KEY_ACCENT = "accent";
     private static final String KEY_SIZE = "size";
+    private static final String KEY_RECENTS = "recents";
     private static final String PLAY_STORE = "com.android.vending";
     private static final int MAX_RECENTS = 5;
-    private static final long RECENT_WINDOW_MS = 7L * 24 * 60 * 60 * 1000;
 
     /** Accent palettes: gradient start, gradient end (also the glow), focus ring. */
     private static final String[] ACCENT_NAMES = {"Corail", "Cyan", "Violet"};
@@ -123,8 +119,10 @@ public class MainActivity extends Activity {
 
     /** Every launchable app, hidden ones included. */
     private List<App> allApps = new ArrayList<>();
-    /** Packages by last use, most recent first (unfiltered). */
+    /** Apps opened from this launcher, most recent first (unfiltered). */
     private List<String> recentPkgs = new ArrayList<>();
+    /** Set when an app was launched; the Récents row is rebuilt on return, not while launching. */
+    private boolean recentsDirty;
     private String focusedKey;
     /** First row of tiles; focusing it scrolls back to the very top. */
     private View firstRow;
@@ -150,6 +148,8 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         prefs = getSharedPreferences("launcher", MODE_PRIVATE);
+        String r = prefs.getString(KEY_RECENTS, "");
+        if (!r.isEmpty()) recentPkgs = new ArrayList<>(Arrays.asList(r.split("\\|")));
         density = getResources().getDisplayMetrics().density;
         scroll = findViewById(R.id.scroll);
         sections = findViewById(R.id.sections);
@@ -176,7 +176,10 @@ public class MainActivity extends Activity {
         super.onResume();
         ui.removeCallbacks(tick);
         tick.run();
-        loadRecents();
+        if (recentsDirty) {
+            recentsDirty = false;
+            render();
+        }
     }
 
     @Override
@@ -273,47 +276,6 @@ public class MainActivity extends Activity {
         return new BitmapDrawable(getResources(), b);
     }
 
-    /**
-     * Reads last-used times once per return to the home screen (no polling).
-     * Needs usage access, granted once over ADB; without it the row stays hidden.
-     */
-    private void loadRecents() {
-        if (!hasUsageAccess()) return;
-        io.execute(() -> {
-            UsageStatsManager usm = getSystemService(UsageStatsManager.class);
-            long now = System.currentTimeMillis();
-            List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_BEST, now - RECENT_WINDOW_MS, now);
-            Map<String, Long> last = new HashMap<>();
-            if (stats != null) {
-                for (UsageStats s : stats) {
-                    if (s.getTotalTimeInForeground() <= 0) continue;
-                    last.merge(s.getPackageName(), s.getLastTimeUsed(), Math::max);
-                }
-            }
-            List<String> pkgs = new ArrayList<>(last.keySet());
-            pkgs.sort((a, b) -> Long.compare(last.get(b), last.get(a)));
-            ui.post(() -> {
-                if (pkgs.equals(recentPkgs)) return;
-                recentPkgs = pkgs;
-                render();
-            });
-        });
-    }
-
-    @SuppressWarnings("deprecation")
-    private boolean hasUsageAccess() {
-        AppOpsManager ops = getSystemService(AppOpsManager.class);
-        int mode = Build.VERSION.SDK_INT >= 29
-                ? ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), getPackageName())
-                : ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), getPackageName());
-        // The appop is reset on boot on Google TV; "pm grant" survives it and shows up as
-        // MODE_DEFAULT + a granted permission.
-        return mode == AppOpsManager.MODE_ALLOWED
-                || (mode == AppOpsManager.MODE_DEFAULT
-                && checkSelfPermission(android.Manifest.permission.PACKAGE_USAGE_STATS)
-                == PackageManager.PERMISSION_GRANTED);
-    }
-
     /** Visible apps in user order; unordered apps follow alphabetically. */
     private List<App> visibleApps() {
         Set<String> hidden = stringSet(KEY_HIDDEN);
@@ -342,7 +304,24 @@ public class MainActivity extends Activity {
             startActivity(i);
         } catch (Exception e) {
             toast("Impossible d'ouvrir " + a.label);
+            return;
         }
+        rememberRecent(a.pkg());
+    }
+
+    /**
+     * Récents = apps opened from this launcher. No usage-stats permission (Google TV returns
+     * nothing to third-party launchers anyway), no system queries: one pref write per launch.
+     */
+    private void rememberRecent(String pkg) {
+        List<String> r = new ArrayList<>(recentPkgs);
+        r.remove(pkg);
+        r.add(0, pkg);
+        while (r.size() > MAX_RECENTS * 2) r.remove(r.size() - 1);
+        if (r.equals(recentPkgs)) return;
+        recentPkgs = r;
+        prefs.edit().putString(KEY_RECENTS, String.join("|", r)).apply();
+        recentsDirty = true;
     }
 
     private boolean hasApp(String pkg) {

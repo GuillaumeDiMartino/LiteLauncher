@@ -28,7 +28,7 @@ Ma Chromecast est à l'IP [IP], mode développeur et débogage USB activés, sur
 3. Récupère les vraies bannières TV et icônes de mes apps installées, et branche-les dans preview/index.html à la place des logos d'exemple, avec la liste réelle de mes apps.
 4. Lance l'aperçu dans le navigateur intégré pour que je valide le design.
 5. Compile l'APK en release et installe-le sur la Chromecast.
-6. Donne l'accès aux statistiques d'usage (rangée Récents) et passe les animations système à 0.5x, avec les commandes ADB de la section Install.
+6. Passe les animations système à 0.5x avec les commandes ADB de la section Install.
 7. Avant de désactiver les écrans Google (launcherx, tvlauncher, setupwraith), demande-moi confirmation et rappelle-moi les commandes pour revenir en arrière.
 8. Mesure la mémoire utilisée avant et après (dumpsys meminfo), puis guide-moi dans la section "Chromecast optimizations" du README : propose la liste des paquets à désactiver à partir de ceux réellement installés, en m'expliquant chacun, et demande-moi confirmation avant chaque désactivation.
 9. Pousse les modifications sur le dépôt GitHub.
@@ -41,8 +41,8 @@ Ma Chromecast est à l'IP [IP], mode développeur et débogage USB activés, sur
   open its app info, or uninstall it.
 - Quick settings row: Wi-Fi, Bluetooth, Display, Screensaver ("Veille"), Play Store, Settings,
   Style (accent color and tile size), and "Masquées" to show hidden apps again.
-- "Récents" lists the apps used in the last 7 days. It only appears once usage access is
-  granted (see Install).
+- "Récents" lists the last apps opened from Lite Launcher (no permission needed). Apps opened
+  another way, such as the YouTube or Netflix buttons on the remote, are not counted.
 - Home jumps back to the top.
 
 ## Install
@@ -94,13 +94,7 @@ adb shell pm disable-user --user 0 com.google.android.tvlauncher
 adb shell pm disable-user --user 0 com.google.android.tungsten.setupwraith
 ```
 
-6. Allow the "Récents" row. Use `pm grant`: the `appops` setting is reset on every boot on Google TV.
-
-```bash
-adb shell pm grant fr.lite.launcher android.permission.PACKAGE_USAGE_STATS
-```
-
-7. Make the whole device feel faster by halving system animations:
+6. Make the whole device feel faster by halving system animations:
 
 ```bash
 adb shell settings put global window_animation_scale 0.5
