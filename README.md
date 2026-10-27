@@ -11,6 +11,52 @@ Rule for every change: it must never hurt fluidity or memory use.
 Everything below is done over ADB, either with the Chromecast plugged into the PC over USB, or
 over Wi-Fi with wireless debugging. Tested on Chromecast with Google TV 4K and HD (Android 14).
 
+## Do everything with Claude Code
+
+Claude Code can do the whole installation for you: get the project, install the tools, build,
+connect to the Chromecast, install the launcher and check the result with a screenshot. You only
+have a few things to do on the TV.
+
+**You need:**
+- a PC with the Claude app (Code tab);
+- the Chromecast plugged into the TV;
+- a USB-C data cable, or else the PC and the Chromecast on the same Wi-Fi.
+
+**On the Chromecast, once:**
+1. Settings > System > About: press "Android TV OS build" 7 times.
+2. Settings > System > Developer options: turn on "USB debugging" (and "Wireless debugging" if you
+   go over Wi-Fi).
+3. Plug the Chromecast's USB-C port into the PC (HDMI stays on the TV).
+
+**Then paste this prompt in Claude Code** (in French; Claude answers in the language you use):
+
+```text
+Installe Lite Launcher sur ma Chromecast avec Google TV : https://github.com/GuillaumeDiMartino/LiteLauncher
+
+Contexte : c'est un écran d'accueil Android TV ultra léger (Java natif, aucune bibliothèque) qui remplace l'écran Google TV, trop lourd. Lis README.fr.md et le code avant de commencer.
+
+Règles :
+- Chaque modification ne doit jamais dégrader les performances ni la fluidité (pas de flou, pas de réseau, pas de service en arrière-plan, pas de bibliothèque lourde). Indique le coût de chaque idée avant de la coder et mesure sur la Chromecast avec dumpsys gfxinfo avant de garder un changement.
+- Demande-moi avant chaque téléchargement, avant d'accepter une licence, et avant de désactiver quoi que ce soit sur la Chromecast.
+- Dis-moi clairement ce que je dois faire moi-même sur la TV (appuyer, accepter, lire un code).
+
+Étapes :
+1. Récupère le projet (git clone, ou l'archive ZIP de GitHub si Git n'est pas installé).
+2. Installe ce qui manque dans un dossier à part : ADB (platform-tools), JDK 17+, SDK Android (platform 34, build-tools 34), Gradle 8.7. Si Gradle échoue avec "Unable to establish loopback connection", applique la solution de la section Compilation.
+3. Compile l'APK en release.
+4. Connecte-toi à la Chromecast : d'abord en USB (adb -d). Pendant que j'accepte la fenêtre d'autorisation sur la TV, ne relance ni adb ni la connexion. Si elle reste "unauthorized", passe en Wi-Fi : je te donnerai l'adresse et le code d'association du débogage sans fil.
+5. Inspecte la Chromecast : modèle, version d'Android, mémoire disponible, et liste des écrans d'accueil (cmd package query-activities pour la catégorie HOME).
+6. Installe l'APK et définis-le comme écran d'accueil.
+7. Montre-moi quels écrans Google tu vas désactiver (normalement launcherx, tvlauncher, setupwraith) et pourquoi, rappelle-moi les commandes pour revenir en arrière, puis attends mon accord. Garde l'USB branché si possible pendant cette étape.
+8. Appuie sur Home par ADB, fais une capture d'écran et vérifie que Lite Launcher s'affiche. En cas d'écran noir, rouvre Lite Launcher par ADB et explique-moi.
+9. Passe les animations système à 0.5x et mesure la mémoire disponible avant/après.
+10. Propose-moi les optimisations de la section "Optimisations Chromecast" adaptées aux apps réellement installées, une par une.
+11. À la fin, coupe le débogage sans fil s'il a été utilisé et résume ce qui a été fait et comment tout annuler.
+```
+
+During the install, Claude asks you to accept the authorization prompt on the TV (tick "Always
+allow"), to approve downloads, and to confirm before disabling the Google home screens.
+
 ## Connect the Chromecast over USB
 
 USB is the most reliable connection: it does not depend on Wi-Fi, and it keeps working whatever is
@@ -61,31 +107,6 @@ adb -s <IP>:<port> shell settings put global adb_wifi_enabled 0
 
 Keep a USB connection when possible while disabling the Google home screens: if the screen goes
 black, Wi-Fi debugging can drop, USB keeps working.
-
-## Resume with Claude on another PC
-
-Prerequisites: the Claude app (Code tab) and Git installed, and the Chromecast connected over USB or
-Wi-Fi as above. Paste this prompt in Claude:
-
-```text
-Clone https://github.com/GuillaumeDiMartino/LiteLauncher.git puis lis le README.fr.md et le code.
-
-Contexte : c'est un launcher Android TV ultra léger que j'ai conçu pour remplacer l'écran d'accueil Google TV de ma Chromecast avec Google TV, qui rame. Java natif sans aucune bibliothèque : salutation, horloge, sections Favoris / Récents / Applications / Réglages rapides, menu appui long (favoris, déplacer, masquer, désinstaller), couleur d'accent et taille des tuiles réglables. Le dossier preview/ contient une maquette HTML fidèle (960x540 dp) qui sert à travailler le design avant de le reporter dans le code Android.
-
-Règle absolue : chaque modification ne doit jamais dégrader les performances ni la fluidité (pas de flou, pas de réseau, pas de service en arrière-plan, pas de bibliothèque lourde). Indique le coût de chaque idée avant de la coder, et mesure sur la Chromecast avec dumpsys gfxinfo avant de garder un changement.
-
-Ma Chromecast est branchée en USB sur ce PC (débogage USB activé, utilise adb -d). Si l'USB reste « unauthorized », on passe en Wi-Fi : je te donnerai l'adresse et le code d'association du débogage sans fil. Ne relance pas adb pendant que j'accepte la fenêtre d'autorisation sur la TV.
-
-Étapes :
-1. Installe ce qu'il manque : ADB (platform-tools), JDK 17+, SDK Android (platform 34, build-tools 34), Gradle. Demande-moi avant chaque téléchargement et avant d'accepter une licence.
-2. Vérifie que la Chromecast apparaît dans adb devices (j'accepterai la fenêtre sur la TV).
-3. Compile l'APK en release et installe-le.
-4. Avant de désactiver les écrans Google (launcherx, tvlauncher, setupwraith), demande-moi confirmation et rappelle-moi les commandes pour revenir en arrière.
-5. Passe les animations système à 0.5x avec les commandes de la section Installation.
-6. Mesure la mémoire avant et après (dumpsys meminfo), puis guide-moi dans la section "Optimisations Chromecast" : propose les paquets à désactiver parmi ceux réellement installés, explique chacun, et demande-moi confirmation avant chaque désactivation.
-7. À la fin, coupe le débogage sans fil s'il a été utilisé.
-8. Pousse les modifications sur le dépôt GitHub.
-```
 
 ## Remote control
 
