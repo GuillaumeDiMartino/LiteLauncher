@@ -8,83 +8,111 @@ access, no libraries.
 
 Rule for every change: it must never hurt fluidity or memory use.
 
-Everything below is done over ADB, either with the Chromecast plugged into the PC over USB, or
-over Wi-Fi with wireless debugging. Tested on Chromecast with Google TV 4K and HD (Android 14).
+Tested on Chromecast with Google TV 4K and HD (Android 14).
 
-## Do everything with Claude Code
+Two ways to install:
 
-Claude Code can do the whole installation for you: get the project, install the tools, build,
-connect to the Chromecast, install the launcher and check the result with a screenshot. You only
-have a few things to do on the TV.
+- **[Option 1: with Claude Code](#option-1-with-claude-code)**: Claude does everything, over
+  Wi-Fi. You only do a few things on the TV.
+- **[Option 2: by hand](#option-2-by-hand)**: you type the ADB commands yourself, over USB or Wi-Fi.
 
-**You need:**
+---
+
+# Option 1: with Claude Code
+
+Claude Code gets the project, installs the tools, builds, connects to the Chromecast **over
+Wi-Fi**, installs the launcher and checks the result with a screenshot.
+
+## You need
+
 - a PC with the Claude app (Code tab);
-- the Chromecast plugged into the TV;
-- a USB-C data cable, or else the PC and the Chromecast on the same Wi-Fi.
+- the Chromecast plugged into the TV, on the **same Wi-Fi network** as the PC.
 
-**On the Chromecast, once:**
+## On the Chromecast, yourself
+
 1. Settings > System > About: press "Android TV OS build" 7 times.
-2. Settings > System > Developer options: turn on "USB debugging" (and "Wireless debugging" if you
-   go over Wi-Fi).
-3. Plug the Chromecast's USB-C port into the PC (HDMI stays on the TV).
+2. Settings > System > Developer options: turn on "Wireless debugging".
+3. Open "Wireless debugging" and choose "Pair device with pairing code". Keep this screen open:
+   Claude will ask for the address and code it shows.
 
-**Then paste this prompt in Claude Code** (in French; Claude answers in the language you use):
+## The prompt to paste in Claude Code
+
+The prompt is in French; Claude answers in the language you use.
 
 ```text
 Installe Lite Launcher sur ma Chromecast avec Google TV : https://github.com/GuillaumeDiMartino/LiteLauncher
 
-Contexte : c'est un écran d'accueil Android TV ultra léger (Java natif, aucune bibliothèque) qui remplace l'écran Google TV, trop lourd. Lis README.fr.md et le code avant de commencer.
+Contexte : c'est un écran d'accueil Android TV ultra léger (Java natif, aucune bibliothèque) qui remplace l'écran Google TV, trop lourd. Lis README.fr.md (Option 1) et le code avant de commencer.
+
+Connexion : uniquement en Wi-Fi, avec le débogage sans fil de la Chromecast. Je te donnerai l'adresse:port et le code d'association affichés dans « Associer l'appareil avec un code », puis tu utilises adb pair, adb connect et adb -s <adresse> pour toutes les commandes.
 
 Règles :
 - Chaque modification ne doit jamais dégrader les performances ni la fluidité (pas de flou, pas de réseau, pas de service en arrière-plan, pas de bibliothèque lourde). Indique le coût de chaque idée avant de la coder et mesure sur la Chromecast avec dumpsys gfxinfo avant de garder un changement.
 - Demande-moi avant chaque téléchargement, avant d'accepter une licence, et avant de désactiver quoi que ce soit sur la Chromecast.
-- Dis-moi clairement ce que je dois faire moi-même sur la TV (appuyer, accepter, lire un code).
+- Dis-moi clairement ce que je dois faire moi-même sur la TV.
 
 Étapes :
 1. Récupère le projet (git clone, ou l'archive ZIP de GitHub si Git n'est pas installé).
 2. Installe ce qui manque dans un dossier à part : ADB (platform-tools), JDK 17+, SDK Android (platform 34, build-tools 34), Gradle 8.7. Si Gradle échoue avec "Unable to establish loopback connection", applique la solution de la section Compilation.
 3. Compile l'APK en release.
-4. Connecte-toi à la Chromecast : d'abord en USB (adb -d). Pendant que j'accepte la fenêtre d'autorisation sur la TV, ne relance ni adb ni la connexion. Si elle reste "unauthorized", passe en Wi-Fi : je te donnerai l'adresse et le code d'association du débogage sans fil.
+4. Demande-moi l'adresse et le code d'association, puis associe et connecte-toi en Wi-Fi.
 5. Inspecte la Chromecast : modèle, version d'Android, mémoire disponible, et liste des écrans d'accueil (cmd package query-activities pour la catégorie HOME).
-6. Installe l'APK et définis-le comme écran d'accueil.
-7. Montre-moi quels écrans Google tu vas désactiver (normalement launcherx, tvlauncher, setupwraith) et pourquoi, rappelle-moi les commandes pour revenir en arrière, puis attends mon accord. Garde l'USB branché si possible pendant cette étape.
-8. Appuie sur Home par ADB, fais une capture d'écran et vérifie que Lite Launcher s'affiche. En cas d'écran noir, rouvre Lite Launcher par ADB et explique-moi.
+6. Installe l'APK et définis-le comme écran d'accueil (cmd package set-home-activity).
+7. Montre-moi les écrans Google à désactiver (normalement launcherx, tvlauncher et setupwraith) et pourquoi, rappelle-moi les commandes pour revenir en arrière, puis attends mon accord. Désactive-les ensuite tous les trois dans une seule commande adb shell, suivie aussitôt de set-home-activity : si un seul est désactivé, la Chromecast affiche un écran noir et le débogage sans fil peut se couper.
+8. Appuie sur Home par ADB, fais une capture d'écran et vérifie que Lite Launcher s'affiche. En cas d'écran noir, rouvre Lite Launcher avec am start et explique-moi.
 9. Passe les animations système à 0.5x et mesure la mémoire disponible avant/après.
-10. Propose-moi les optimisations de la section "Optimisations Chromecast" adaptées aux apps réellement installées, une par une.
-11. À la fin, coupe le débogage sans fil s'il a été utilisé et résume ce qui a été fait et comment tout annuler.
+10. Propose-moi les optimisations de la section « Optimisations Chromecast » adaptées aux apps réellement installées, une par une.
+11. À la fin, coupe le débogage sans fil (settings put global adb_wifi_enabled 0) et résume ce qui a été fait et comment tout annuler.
 ```
 
-During the install, Claude asks you to accept the authorization prompt on the TV (tick "Always
-allow"), to approve downloads, and to confirm before disabling the Google home screens.
+## During the install
 
-## Connect the Chromecast over USB
+Claude asks you for the address and pairing code, to approve downloads, then to confirm before
+disabling the Google home screens.
 
-USB is the most reliable connection: it does not depend on Wi-Fi, and it keeps working whatever is
-on screen, even if the home screen breaks.
+Wireless debugging turns itself off at each Chromecast reboot. If the connection drops, turn it
+back on in Developer options: pairing is kept, just give Claude the new address:port from the
+main screen.
+
+As a last resort, if the Chromecast stays on a black screen with no way to connect, a factory reset
+(hold the button on the Chromecast) puts everything back.
+
+---
+
+# Option 2: by hand
+
+All commands below use `-d` (Chromecast plugged in over USB). Over Wi-Fi, replace `-d` with
+`-s <IP>:<port>`.
+
+## Connect
+
+### Over USB (most reliable)
+
+USB does not depend on Wi-Fi and keeps working whatever is on screen, even if the home screen
+breaks.
 
 1. On the Chromecast: Settings > System > About, press "Android TV OS build" 7 times.
 2. Settings > System > Developer options: turn on "USB debugging".
-3. Leave the Chromecast's HDMI plugged into the TV (to see the screen), and plug its USB-C port
-   into the PC with a **data** USB-C cable (a charge-only cable will not work). The PC port powers
-   the Chromecast; if it keeps rebooting, use a USB-C hub with power passthrough.
-4. On the TV, accept "Allow USB debugging?" and tick "Always allow from this computer".
-5. Check it is connected:
+3. Leave the Chromecast's HDMI plugged into the TV, and plug its USB-C port into the PC with a
+   **data** USB-C cable (a charge-only cable will not work). If it keeps rebooting, use a USB-C hub
+   with power passthrough.
+4. On the TV, accept "Allow USB debugging?" and tick "Always allow from this computer". Do not
+   restart adb or reconnect meanwhile: that cancels the pending prompt.
+5. Check:
 
 ```bash
 adb devices
 ```
 
-The Chromecast should appear as `device` (not `unauthorized`). Accept the prompt only once and
-leave the PC alone meanwhile: restarting adb or reconnecting cancels the pending prompt. If it stays
-`unauthorized`, use Wi-Fi below.
+The Chromecast should appear as `device` (not `unauthorized`). If it stays `unauthorized`, use
+Wi-Fi.
 
-## Or connect over Wi-Fi
+### Over Wi-Fi
 
-Works on both models tested, including when USB authorization fails. The PC must be on the same
-network as the Chromecast.
+The PC must be on the same network as the Chromecast.
 
-1. Developer mode as above, then Settings > System > Developer options: turn on "Wireless debugging".
-2. Open it, choose "Pair device with pairing code", and pair with the address and code shown:
+1. Developer mode as above, then Developer options: turn on "Wireless debugging".
+2. Open it, choose "Pair device with pairing code", and pair:
 
 ```bash
 adb pair <IP>:<pairing port> <code>
@@ -96,34 +124,14 @@ adb pair <IP>:<pairing port> <code>
 adb connect <IP>:<port>
 ```
 
-4. In every command below, replace `-d` (USB) with `-s <IP>:<port>`.
-
 Wireless debugging turns itself off at each reboot; pairing is kept, so next time only step 3 is
-needed after turning it back on. When you are done, turn it off (it also closes the connection):
+needed after turning it back on. When you are done, turn it off:
 
 ```bash
 adb -s <IP>:<port> shell settings put global adb_wifi_enabled 0
 ```
 
-Keep a USB connection when possible while disabling the Google home screens: if the screen goes
-black, Wi-Fi debugging can drop, USB keeps working.
-
-## Remote control
-
-- Arrows to move, OK to open an app.
-- Hold OK on an app to add or remove it from favorites, move it within its section, hide it,
-  open its app info, or uninstall it.
-- Quick settings row: Wi-Fi, Bluetooth, Display, Screensaver ("Veille"), Play Store, Settings,
-  Style (accent color and tile size), and "Masquées" to show hidden apps again.
-- "Récents" lists the last apps opened from Lite Launcher (no permission needed). Apps opened
-  another way, such as the YouTube or Netflix buttons on the remote, are not counted.
-- The screen only scrolls when the selected tile would leave it.
-- Home jumps back to the top.
-
 ## Install
-
-With the Chromecast connected (see above). `-d` targets the USB device; over Wi-Fi use
-`-s <IP>:<port>` instead.
 
 1. Install and set as home:
 
@@ -139,7 +147,8 @@ adb -d shell cmd package set-home-activity fr.lite.launcher/.MainActivity
 back to `tvlauncher`, then to a black "RecoveryActivity" screen from the setup app (`setupwraith`),
 which outranks any other launcher. The shell cannot disable just that screen on Android 14, so the
 whole setup package is disabled. A factory reset (Settings > System > About, or holding the button on
-the Chromecast) re-enables everything automatically.
+the Chromecast) re-enables everything automatically. Disable all three in a row, without pressing
+Home in between.
 
 ```bash
 adb -d shell pm disable-user --user 0 com.google.android.apps.tv.launcherx
@@ -175,7 +184,7 @@ reboots.
 
 ## Chromecast optimizations
 
-Optional, done once over USB or Wi-Fi. Every step is reversible.
+Optional, done once. Every step is reversible.
 
 ### Measure first
 
@@ -231,15 +240,13 @@ are unsure about. When in doubt, leave it.
   cache of large ones.
 - System sounds (Settings > Sound): turning them off removes the navigation click, which arrives
   late through HDMI.
-- The remote's power button turns the screen off through HDMI-CEC or infrared. On a PC monitor
-  (no CEC) it does nothing; on a TV, enable CEC (Anynet+, Bravia Sync, SimpLink...).
 - Optional: Developer options > Background process limit. Saves memory, but apps reload more often
   when you switch back. Try it, keep it only if it feels better.
 
 ## Undo
 
-Over USB or Wi-Fi. Re-enable the Google home screens and setup app first (otherwise Home has nowhere to go
-once Lite Launcher is uninstalled):
+Re-enable the Google home screens and setup app first (otherwise Home has nowhere to go once Lite
+Launcher is uninstalled):
 
 ```bash
 adb -d shell pm enable com.google.android.tungsten.setupwraith
@@ -257,8 +264,8 @@ adb -d shell pm enable com.google.android.apps.tv.launcherx
 adb -d uninstall fr.lite.launcher
 ```
 
-Restore normal animations by running the three `settings put global` commands above with `1`
-instead of `0.5`.
+Restore normal animations by running the three `settings put global` commands with `1` instead of
+`0.5`.
 
 A Google system update can turn the stock launcher back on. If that happens, run the disable
 commands again.
@@ -276,3 +283,19 @@ gradle assembleRelease
 ```
 
 The APK is at `app/build/outputs/apk/release/app-release.apk`.
+
+---
+
+# Usage
+
+- Arrows to move, OK to open an app.
+- Hold OK on an app to add or remove it from favorites, move it within its section, hide it,
+  open its app info, or uninstall it.
+- Quick settings row: Wi-Fi, Bluetooth, Display, Screensaver ("Veille"), Play Store, Settings,
+  Style (accent color and tile size), and "Masquées" to show hidden apps again.
+- "Récents" lists the last apps opened from Lite Launcher (no permission needed). Apps opened
+  another way, such as the YouTube or Netflix buttons on the remote, are not counted.
+- The screen only scrolls when the selected tile would leave it.
+- Home jumps back to the top.
+- The remote's power button turns the screen off through HDMI-CEC or infrared. On a PC monitor
+  (no CEC) it does nothing; on a TV, enable CEC (Anynet+, Bravia Sync, SimpLink...).
